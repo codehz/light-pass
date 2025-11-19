@@ -1,0 +1,39 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "light-pass",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-22",
+  "migrations": [
+    {
+      "new_sqlite_classes": ["Backend", "Looper"],
+      "tag": "v1",
+    },
+  ],
+  "assets": {
+    "directory": "../frontend/dist",
+  },
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "Backend", "name": "BACKEND" },
+      { "class_name": "Looper", "name": "LOOPER" },
+    ],
+  },
+  "observability": { "enabled": true },
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
+  "workflows": [
+    {
+      "class_name": "VerifyUser",
+      "binding": "VERIFY",
+      "name": "workflows-VerifyUser",
+    },
+  ],
+  "routes": [
+    {
+      "pattern": "light-pass.hertz.services",
+      "custom_domain": true,
+    },
+  ],
+  "placement": {
+    "mode": "off",
+  },
+}

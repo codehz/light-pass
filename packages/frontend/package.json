@@ -1,0 +1,32 @@
+{
+  "name": "frontend",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "^1.2.19",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@types/telegram-mini-app": "^9.0.0"
+  },
+  "dependencies": {
+    "@codehz/form": "^0.1.1",
+    "@remixicon/react": "^4.6.0",
+    "@tanstack/react-query": "^5.84.1",
+    "@telegram-apps/sdk-react": "^3.3.6",
+    "@types/csso": "^5.0.4",
+    "bun-tailwindcss": "^0.0.9",
+    "classnames": "^2.5.1",
+    "date-fns": "^4.1.0",
+    "nanoid": "^5.1.5",
+    "postcss": "^8.5.6",
+    "postcss-csso": "^6.0.1",
+    "postcss-nested": "^7.0.2",
+    "react": "*",
+    "react-dom": "*",
+    "react-error-boundary": "^6.0.0",
+    "react-is": "19.1.1",
+    "sonner": "^2.0.7",
+    "subsetted-fonts": "^1.0.4",
+    "tailwindcss": "^4.1.11",
+    "usehooks-ts": "^3.1.1"
+  }
+}
