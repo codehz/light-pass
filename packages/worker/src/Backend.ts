@@ -303,11 +303,12 @@ export class Backend extends DurableObject<Env> {
         ),
         with: { Chat: true },
       });
+      if (!found?.Chat.config) {
+        console.error("invalid join request", found);
+        await this.removeJoinRequest(chat, user);
+        return;
+      }
       try {
-        if (!found?.Chat.config) {
-          console.error("invalid join request", found);
-          throw new Error("invalid join request");
-        }
         await tx.insert(schema.JoinResponse).values({
           chat,
           user,
@@ -327,7 +328,6 @@ export class Backend extends DurableObject<Env> {
         });
       } catch (e) {
         console.error("failed to send user answer", e);
-        await this.removeJoinRequest(chat, user);
       }
     });
   }
