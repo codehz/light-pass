@@ -14,7 +14,7 @@ export type VerifyUserParams = {
   user: number;
   userChatId: number;
   config: ChatConfig;
-  deadline: Date;
+  deadline: number;
 };
 
 export const AdminAction = type({ type: "'approved by admin'" })
@@ -69,6 +69,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
         event.payload.user,
       );
     });
+    let groupMessageId: number | undefined = undefined;
     try {
       const adminAction = step.waitForEvent<AdminAction>(
         "Wait for admin action",
@@ -107,15 +108,18 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
         return;
       }
       if ("answer" in waitResult) {
-        await step.do("Notify user answered", async () => {
+        groupMessageId = await step.do("Notify user answered", async () => {
           try {
             const name = await Backend.getChatTitle(event.payload.user);
-            await api.sendMessage(this.env.BOT_TOKEN, {
+            const sent = await api.sendMessage(this.env.BOT_TOKEN, {
               chat_id: event.payload.chat,
               text: `用户${name}回答：\n${waitResult.answer.answer}`,
               reply_markup: withOpenAppButton(this.env.BOT_USERNAME),
             });
-          } catch {}
+            return sent.message_id;
+          } catch (e) {
+            console.error("failed to notify user answer to group", e);
+          }
         });
       }
       const approvedResult = await adminAction;
@@ -141,7 +145,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
               text: event.payload.config.welcome,
             });
           });
-          return;
+          break;
         case "declined by admin":
           await step.do("Decline user", async () => {
             try {
@@ -155,7 +159,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
               throw e;
             }
           });
-          return;
+          break;
         case "banned by admin":
           await step.do("Decline user", async () => {
             try {
@@ -181,7 +185,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
               throw e;
             }
           });
-          return;
+          break;
       }
     } finally {
       await step.do("Reset looper", async () => {
@@ -194,6 +198,18 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
       await step.do("Reset request", async () => {
         await Backend.removeJoinRequest(event.payload.chat, event.payload.user);
       });
+      if (groupMessageId) {
+        await step.do("Delete group message", async () => {
+          try {
+            await api.deleteMessage(this.env.BOT_TOKEN, {
+              chat_id: event.payload.chat,
+              message_id: groupMessageId!,
+            });
+          } catch (e) {
+            console.error("failed to delete group message", e);
+          }
+        });
+      }
     }
   }
 }

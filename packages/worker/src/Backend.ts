@@ -132,7 +132,7 @@ export class Backend extends DurableObject<Env> {
           user: request.from.id,
           userChatId: request.user_chat_id,
           config: chat.config,
-          deadline,
+          deadline: deadline.getTime(),
         } satisfies VerifyUserParams,
       });
     });
