@@ -11,6 +11,37 @@ import { withOpenAppButton } from "./utils/button";
 import { renderTemplate } from "./utils/template";
 
 /**
+ * 上下文对象类型，用于模板渲染
+ */
+type Context = {
+  user: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    username: string;
+    display_name: string;
+  };
+  chat: {
+    id: number;
+    title: string;
+  };
+  request: {
+    deadline: number;
+    date: number;
+  };
+  meta: {
+    deadline_formatted: string;
+    bot_username: string;
+  };
+  response?: {
+    question: string;
+    answer: string;
+    details: string;
+    date: number;
+  };
+};
+
+/**
  * 验证用户加入群组请求的工作流参数
  */
 export type VerifyUserParams = {
@@ -35,6 +66,69 @@ export type AdminAction = typeof AdminAction.infer;
  * 该工作流管理用户回答问题、管理员审批以及超时处理
  */
 export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
+  /**
+   * 构建上下文对象，用于模板渲染
+   * @param event 工作流事件
+   * @param response 可选的用户回答信息
+   * @returns 上下文对象
+   */
+  private async buildContext(
+    event: Readonly<WorkflowEvent<VerifyUserParams>>,
+    response?: { question: string; answer: string; details: string },
+  ): Promise<Context> {
+    // 从 BOT_TOKEN 中提取机器人 ID，用于创建 Durable Object ID
+    const botId = this.env.BOT_TOKEN.split(":")[0];
+    // 创建 Backend Durable Object 的 ID 和实例，用于数据操作
+    const id: DurableObjectId = this.env.BACKEND.idFromName(botId);
+    const Backend = this.env.BACKEND.get(id);
+
+    const userChat = await api.getChat(this.env.BOT_TOKEN, {
+      chat_id: event.payload.userChatId,
+    });
+    if (userChat.type !== "private") {
+      throw new Error("User chat is not private");
+    }
+    const chatTitle = await Backend.getChatTitle(event.payload.chat);
+    const userDisplayName = await Backend.getChatTitle(
+      event.payload.userChatId,
+    );
+
+    const context: Context = {
+      user: {
+        id: event.payload.user,
+        first_name: userChat.first_name || "",
+        last_name: userChat.last_name || "",
+        username: userChat.username || "",
+        display_name: userDisplayName,
+      },
+      chat: {
+        id: event.payload.chat,
+        title: chatTitle,
+      },
+      request: {
+        deadline: event.payload.deadline,
+        date: Date.now(),
+      },
+      meta: {
+        deadline_formatted: new Date(event.payload.deadline).toLocaleString(
+          "zh-CN",
+        ),
+        bot_username: this.env.BOT_USERNAME,
+      },
+    };
+
+    if (response) {
+      context.response = {
+        question: response.question,
+        answer: response.answer,
+        details: response.details,
+        date: Date.now(),
+      };
+    }
+
+    return context;
+  }
+
   /**
    * 执行验证工作流的主要方法
    * @param event 工作流事件，包含参数
@@ -64,39 +158,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
           async () => {
             try {
               // 获取用户和群组信息用于模板渲染
-              const userChat = await api.getChat(this.env.BOT_TOKEN, {
-                chat_id: event.payload.userChatId,
-              });
-              if (userChat.type !== "private") {
-                throw new Error("User chat is not private");
-              }
-              const chatTitle = await Backend.getChatTitle(event.payload.chat);
-              const userDisplayName = await Backend.getChatTitle(
-                event.payload.userChatId,
-              );
-              const context = {
-                user: {
-                  id: event.payload.user,
-                  first_name: userChat.first_name || "",
-                  last_name: userChat.last_name || "",
-                  username: userChat.username || "",
-                  display_name: userDisplayName,
-                },
-                chat: {
-                  id: event.payload.chat,
-                  title: chatTitle,
-                },
-                request: {
-                  deadline: event.payload.deadline,
-                  date: Date.now(),
-                },
-                meta: {
-                  deadline_formatted: new Date(
-                    event.payload.deadline,
-                  ).toLocaleString("zh-CN"),
-                  bot_username: this.env.BOT_USERNAME,
-                },
-              };
+              const context = await this.buildContext(event);
               const renderedText = renderTemplate(
                 event.payload.config.prompt.text_in_private,
                 context,
@@ -122,39 +184,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
     // 通知群组循环器，发送通知消息到群组
     await step.do("Notify chat loop", async () => {
       // 获取上下文用于渲染
-      const userChat = await api.getChat(this.env.BOT_TOKEN, {
-        chat_id: event.payload.userChatId,
-      });
-      if (userChat.type !== "private") {
-        throw new Error("User chat is not private");
-      }
-      const chatTitle = await Backend.getChatTitle(event.payload.chat);
-      const userDisplayName = await Backend.getChatTitle(
-        event.payload.userChatId,
-      );
-      const context = {
-        user: {
-          id: event.payload.user,
-          first_name: userChat.first_name || "",
-          last_name: userChat.last_name || "",
-          username: userChat.username || "",
-          display_name: userDisplayName,
-        },
-        chat: {
-          id: event.payload.chat,
-          title: chatTitle,
-        },
-        request: {
-          deadline: event.payload.deadline,
-          date: Date.now(),
-        },
-        meta: {
-          deadline_formatted: new Date(event.payload.deadline).toLocaleString(
-            "zh-CN",
-          ),
-          bot_username: this.env.BOT_USERNAME,
-        },
-      };
+      const context = await this.buildContext(event);
       const renderedText = renderTemplate(
         event.payload.config.prompt.text_in_group,
         context,
@@ -215,45 +245,11 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
         groupMessageId = await step.do("Notify user answered", async () => {
           try {
             // 获取用户和群组信息用于模板渲染
-            const userChat = await api.getChat(this.env.BOT_TOKEN, {
-              chat_id: event.payload.userChatId,
+            const context = await this.buildContext(event, {
+              question: waitResult.answer.question,
+              answer: waitResult.answer.answer,
+              details: waitResult.answer.details,
             });
-            if (userChat.type !== "private") {
-              throw new Error("User chat is not private");
-            }
-            const chatTitle = await Backend.getChatTitle(event.payload.chat);
-            const userDisplayName = await Backend.getChatTitle(
-              event.payload.userChatId,
-            );
-            const context = {
-              user: {
-                id: event.payload.user,
-                first_name: userChat.first_name || "",
-                last_name: userChat.last_name || "",
-                username: userChat.username || "",
-                display_name: userDisplayName,
-              },
-              chat: {
-                id: event.payload.chat,
-                title: chatTitle,
-              },
-              request: {
-                deadline: event.payload.deadline,
-                date: Date.now(),
-              },
-              response: {
-                question: waitResult.answer.question,
-                answer: waitResult.answer.answer,
-                details: waitResult.answer.details,
-                date: Date.now(),
-              },
-              meta: {
-                deadline_formatted: new Date(
-                  event.payload.deadline,
-                ).toLocaleString("zh-CN"),
-                bot_username: this.env.BOT_USERNAME,
-              },
-            };
             // 使用模板渲染用户回答消息
             const template =
               event.payload.config.response_template ||
@@ -293,39 +289,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
           });
           // 发送欢迎消息到群组
           await step.do("Send welcome to group", async () => {
-            const userChat = await api.getChat(this.env.BOT_TOKEN, {
-              chat_id: event.payload.userChatId,
-            });
-            if (userChat.type !== "private") {
-              throw new Error("User chat is not private");
-            }
-            const chatTitle = await Backend.getChatTitle(event.payload.chat);
-            const userDisplayName = await Backend.getChatTitle(
-              event.payload.userChatId,
-            );
-            const context = {
-              user: {
-                id: event.payload.user,
-                first_name: userChat.first_name || "",
-                last_name: userChat.last_name || "",
-                username: userChat.username || "",
-                display_name: userDisplayName,
-              },
-              chat: {
-                id: event.payload.chat,
-                title: chatTitle,
-              },
-              request: {
-                deadline: event.payload.deadline,
-                date: Date.now(),
-              },
-              meta: {
-                deadline_formatted: new Date(
-                  event.payload.deadline,
-                ).toLocaleString("zh-CN"),
-                bot_username: this.env.BOT_USERNAME,
-              },
-            };
+            const context = await this.buildContext(event);
             const template = event.payload.config.welcome ?? "";
             const renderedText = renderTemplate(template, context);
             await api.sendMessage(this.env.BOT_TOKEN, {
