@@ -115,7 +115,7 @@ function AdminCard({
     >
       {requests.length > 0 && (
         <>
-          <div className={tw("text-subtitle-text border-b-1 mt-2 text-xs")}>
+          <div className={tw("text-subtitle-text border-b mt-2 text-xs")}>
             入群请求列表（点击头像查看详情）
           </div>
           <div
