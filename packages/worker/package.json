@@ -10,14 +10,14 @@
     "migration:generate": "drizzle-kit generate --dialect=sqlite --driver=durable-sqlite --schema=./src/db.ts --out=./src/migrations"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.31.7",
-    "typescript": "^5.5.2",
-    "wrangler": "^4.49.0"
+    "drizzle-kit": "^0.31.8",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.56.0"
   },
   "dependencies": {
     "@telegraf/types": "^9.2.1",
-    "arktype": "^2.1.27",
-    "drizzle-orm": "^0.44.7",
+    "arktype": "^2.1.29",
+    "drizzle-orm": "^0.45.1",
     "nanoid": "^5.1.6",
     "workers-cache-storage": "0.1.2"
   }
