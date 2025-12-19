@@ -13,7 +13,7 @@ Light Pass is a Telegram bot system for managing group join requests with a Mini
 - **Build & Deploy**: Run `bun run deploy` from root to build frontend and deploy worker.
 - **Local Dev**: `cd packages/worker && bun run dev` for worker; frontend served via worker dev proxy.
 - **Migrations**: `cd packages/worker && bun run migration:generate` to create DB schema changes.
-- **Type Generation**: `cd packages/worker && bun run cf-typegen` for Cloudflare types.
+- **Type Checking**: use #tool:read/problems tooling for TypeScript checks.
 - **Debugging**: Use `wrangler tail` to view logs; workflows handle async join request processing.
 
 ## Project Conventions
