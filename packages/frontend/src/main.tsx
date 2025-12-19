@@ -69,7 +69,6 @@ function App() {
     }
     viewport.mount().then(async () => {
       try {
-        await viewport.requestFullscreen();
         try {
           const color = themeParams.accentTextColor();
           if (color) miniApp.setHeaderColor(color);
