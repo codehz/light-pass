@@ -12,9 +12,15 @@ import { FormTextarea } from "../components/FormTextarea";
 import { MaybePhoto } from "../components/MaybePhoto";
 import { SafeAreaPage } from "../components/SafeAreaPage";
 import { useNavigatePop } from "../components/StackNavigator";
+import { VariableHint } from "../components/VariableHint";
 import { useAsyncState } from "../hooks/useAsyncState";
 import { ChatConfig, rpc } from "../rpc";
 import { SubTitle } from "../components/SubTitle";
+import {
+  PRIVATE_PROMPT_VARIABLES,
+  GROUP_PROMPT_VARIABLES,
+  RESPONSE_TEMPLATE_VARIABLES,
+} from "../utils/templateVariables";
 
 export function ChatSettings({
   initial,
@@ -90,23 +96,17 @@ export function ChatSettings({
         <Fieldset title="触发提示" disabled={saving}>
           <FormLabel title="私聊提示">
             <FormTextarea proxy={proxy("prompt.text_in_private")} required />
+            <VariableHint variables={PRIVATE_PROMPT_VARIABLES} />
           </FormLabel>
           <FormLabel title="群聊提示">
             <FormTextarea proxy={proxy("prompt.text_in_group")} required />
+            <VariableHint variables={GROUP_PROMPT_VARIABLES} />
           </FormLabel>
         </Fieldset>
         <Fieldset title="用户回答展示" disabled={saving}>
           <FormLabel title="回答模板">
             <FormTextarea proxy={proxy("response_template")} required />
-            <p className={tw("mt-2 text-xs text-gray-500")}>
-              可用变量：
-              <br />
-              <code>user.display_name</code> - 用户显示名称
-              <br />
-              <code>response.answer</code> - 用户的回答
-              <br />
-              <code>response.details</code> - 回答详情
-            </p>
+            <VariableHint variables={RESPONSE_TEMPLATE_VARIABLES} />
           </FormLabel>
         </Fieldset>
         <Button
