@@ -54,6 +54,7 @@
         "workers-cache-storage": "0.1.2",
       },
       "devDependencies": {
+        "@types/bun": "^1.3.5",
         "drizzle-kit": "^0.31.8",
         "typescript": "^5.9.3",
         "wrangler": "^4.56.0",
