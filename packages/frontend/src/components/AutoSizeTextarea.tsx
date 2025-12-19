@@ -35,7 +35,7 @@ export const AutoSizeTextArea = memo(function AutoSizeTextArea({
           className={classNames(
             makeClass(
               "auto-size-text-area-fake-text",
-              "pointer-events-none !invisible whitespace-pre-wrap",
+              "pointer-events-none invisible! whitespace-pre-wrap",
             ),
             className,
           )}
