@@ -294,7 +294,7 @@ function PageRenderer({
               tw(
                 "z-1 fixed bottom-0 left-0 right-0 overflow-y-auto will-change-auto",
                 "bg-bg rounded-t-3xl shadow-2xl",
-                "max-h-[calc(100%_-_var(--tg-content-safe-area-inset-top,0))_-_var(--tg-content-safe-area-inset-bottom,0)]",
+                "max-h-[calc(100%-var(--tg-content-safe-area-inset-top,0))-var(--tg-content-safe-area-inset-bottom,0)]",
                 "safearea",
               ),
               removed
