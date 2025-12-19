@@ -12,7 +12,7 @@ import { FormTextarea } from "../components/FormTextarea";
 import { MaybePhoto } from "../components/MaybePhoto";
 import { SafeAreaPage } from "../components/SafeAreaPage";
 import { useNavigatePop } from "../components/StackNavigator";
-import { VariableHint } from "../components/VariableHint";
+import { FormTextareaWithVariables } from "../components/FormTextareaWithVariables";
 import { useAsyncState } from "../hooks/useAsyncState";
 import { ChatConfig, rpc } from "../rpc";
 import { SubTitle } from "../components/SubTitle";
@@ -95,18 +95,27 @@ export function ChatSettings({
         </Fieldset>
         <Fieldset title="触发提示" disabled={saving}>
           <FormLabel title="私聊提示">
-            <FormTextarea proxy={proxy("prompt.text_in_private")} required />
-            <VariableHint variables={PRIVATE_PROMPT_VARIABLES} />
+            <FormTextareaWithVariables
+              proxy={proxy("prompt.text_in_private")}
+              variables={PRIVATE_PROMPT_VARIABLES}
+              required
+            />
           </FormLabel>
           <FormLabel title="群聊提示">
-            <FormTextarea proxy={proxy("prompt.text_in_group")} required />
-            <VariableHint variables={GROUP_PROMPT_VARIABLES} />
+            <FormTextareaWithVariables
+              proxy={proxy("prompt.text_in_group")}
+              variables={GROUP_PROMPT_VARIABLES}
+              required
+            />
           </FormLabel>
         </Fieldset>
         <Fieldset title="用户回答展示" disabled={saving}>
           <FormLabel title="回答模板">
-            <FormTextarea proxy={proxy("response_template")} required />
-            <VariableHint variables={RESPONSE_TEMPLATE_VARIABLES} />
+            <FormTextareaWithVariables
+              proxy={proxy("response_template")}
+              variables={RESPONSE_TEMPLATE_VARIABLES}
+              required
+            />
           </FormLabel>
         </Fieldset>
         <Button

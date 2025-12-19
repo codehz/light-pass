@@ -1,4 +1,4 @@
-import { Variable } from "../components/VariableHint";
+import { Variable } from "../components/FormTextareaWithVariables";
 
 /**
  * 私聊提示（text_in_private）支持的模板变量
