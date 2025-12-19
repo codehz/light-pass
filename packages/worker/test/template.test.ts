@@ -23,6 +23,16 @@ describe("renderTemplate", () => {
     },
   };
 
+  const contextWithResponse = {
+    ...context,
+    response: {
+      question: "What is your name?",
+      answer: "I am John Doe",
+      details: "Additional details here",
+      date: 1690000000000,
+    },
+  };
+
   it("renders basic variables", () => {
     const template = "Hello {{user.first_name}}!";
     const result = renderTemplate(template, context);
@@ -73,5 +83,17 @@ describe("renderTemplate", () => {
     const template = "Static message";
     const result = renderTemplate(template, context);
     expect(result).toBe("Static message");
+  });
+
+  it("renders response template with user answer", () => {
+    const template = "用户{{user.display_name}}回答：\n{{response.answer}}";
+    const result = renderTemplate(template, contextWithResponse);
+    expect(result).toBe("用户John Doe回答：\nI am John Doe");
+  });
+
+  it("renders custom response template with details", () => {
+    const template = "{{user.display_name}} said: {{response.answer}} ({{response.details}})";
+    const result = renderTemplate(template, contextWithResponse);
+    expect(result).toBe("John Doe said: I am John Doe (Additional details here)");
   });
 });

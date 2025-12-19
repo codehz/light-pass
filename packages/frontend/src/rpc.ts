@@ -65,6 +65,7 @@ export type ChatConfig = {
     text_in_private: string;
     text_in_group: string;
   };
+  response_template: string;
 };
 
 type RpcMapped = {

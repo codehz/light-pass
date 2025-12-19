@@ -256,6 +256,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
             };
             // 使用模板渲染用户回答消息
             const template =
+              event.payload.config.response_template ||
               "用户{{user.display_name}}回答：\n{{response.answer}}";
             const renderedText = renderTemplate(template, context);
             // 发送用户回答到群组

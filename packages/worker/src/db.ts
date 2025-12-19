@@ -28,6 +28,7 @@ export const ChatConfig = type({
   welcome: "string",
   timeout: "number",
   prompt: PromptConfig,
+  response_template: "string",
 });
 export type ChatConfig = typeof ChatConfig.infer;
 const $ChatConfig = customType<{ data: ChatConfig; driverData: string }>({

@@ -37,6 +37,7 @@ export function ChatSettings({
         text_in_private: "",
         text_in_group: "",
       },
+      response_template: "用户{{user.display_name}}回答：\n{{response.answer}}",
     },
   });
   const proxy = useFormFieldProxy(root);
@@ -92,6 +93,20 @@ export function ChatSettings({
           </FormLabel>
           <FormLabel title="群聊提示">
             <FormTextarea proxy={proxy("prompt.text_in_group")} required />
+          </FormLabel>
+        </Fieldset>
+        <Fieldset title="用户回答展示" disabled={saving}>
+          <FormLabel title="回答模板">
+            <FormTextarea proxy={proxy("response_template")} required />
+            <p className={tw("mt-2 text-xs text-gray-500")}>
+              可用变量：
+              <br />
+              <code>user.display_name</code> - 用户显示名称
+              <br />
+              <code>response.answer</code> - 用户的回答
+              <br />
+              <code>response.details</code> - 回答详情
+            </p>
           </FormLabel>
         </Fieldset>
         <Button
