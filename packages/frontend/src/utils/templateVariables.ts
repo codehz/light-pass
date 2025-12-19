@@ -57,3 +57,21 @@ export const RESPONSE_TEMPLATE_VARIABLES: Variable[] = [
   { name: "meta.deadline_formatted", description: "格式化的截止时间（中文）" },
   { name: "meta.bot_username", description: "机器人用户名" },
 ];
+
+/**
+ * 欢迎消息（welcome）支持的模板变量
+ * 在管理员批准用户后向群组发送欢迎文本
+ */
+export const WELCOME_MESSAGE_VARIABLES: Variable[] = [
+  { name: "user.id", description: "用户 ID" },
+  { name: "user.first_name", description: "用户名" },
+  { name: "user.last_name", description: "用户姓" },
+  { name: "user.username", description: "用户 @handle" },
+  { name: "user.display_name", description: "用户显示名称" },
+  { name: "chat.id", description: "群组 ID" },
+  { name: "chat.title", description: "群组标题" },
+  { name: "request.deadline", description: "截止时间戳（毫秒）" },
+  { name: "request.date", description: "请求创建时间戳（毫秒）" },
+  { name: "meta.deadline_formatted", description: "格式化的截止时间（中文）" },
+  { name: "meta.bot_username", description: "机器人用户名" },
+];

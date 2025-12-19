@@ -96,4 +96,10 @@ describe("renderTemplate", () => {
     const result = renderTemplate(template, contextWithResponse);
     expect(result).toBe("John Doe said: I am John Doe (Additional details here)");
   });
+
+  it("renders welcome template with request context", () => {
+    const template = "欢迎 {{user.display_name}} 加入 {{chat.title}}，请在 {{meta.deadline_formatted}} 前完成";
+    const result = renderTemplate(template, context);
+    expect(result).toBe("欢迎 John Doe 加入 Test Group，请在 2023-11-15 00:00:00 前完成");
+  });
 });

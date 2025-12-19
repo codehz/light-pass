@@ -20,6 +20,7 @@ import {
   PRIVATE_PROMPT_VARIABLES,
   GROUP_PROMPT_VARIABLES,
   RESPONSE_TEMPLATE_VARIABLES,
+  WELCOME_MESSAGE_VARIABLES,
 } from "../utils/templateVariables";
 
 export function ChatSettings({
@@ -82,7 +83,11 @@ export function ChatSettings({
             <FormTextarea proxy={proxy("question")} required />
           </FormLabel>
           <FormLabel title="入群欢迎">
-            <FormTextarea proxy={proxy("welcome")} required />
+            <FormTextareaWithVariables
+              proxy={proxy("welcome")}
+              variables={WELCOME_MESSAGE_VARIABLES}
+              required
+            />
           </FormLabel>
           <FormLabel title="超时时间（单位：秒）">
             <FormInput.number

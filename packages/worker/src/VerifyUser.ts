@@ -292,10 +292,45 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
             }
           });
           // 发送欢迎消息到群组
-          await step.do("Send message to group", async () => {
+          await step.do("Send welcome to group", async () => {
+            const userChat = await api.getChat(this.env.BOT_TOKEN, {
+              chat_id: event.payload.userChatId,
+            });
+            if (userChat.type !== "private") {
+              throw new Error("User chat is not private");
+            }
+            const chatTitle = await Backend.getChatTitle(event.payload.chat);
+            const userDisplayName = await Backend.getChatTitle(
+              event.payload.userChatId,
+            );
+            const context = {
+              user: {
+                id: event.payload.user,
+                first_name: userChat.first_name || "",
+                last_name: userChat.last_name || "",
+                username: userChat.username || "",
+                display_name: userDisplayName,
+              },
+              chat: {
+                id: event.payload.chat,
+                title: chatTitle,
+              },
+              request: {
+                deadline: event.payload.deadline,
+                date: Date.now(),
+              },
+              meta: {
+                deadline_formatted: new Date(
+                  event.payload.deadline,
+                ).toLocaleString("zh-CN"),
+                bot_username: this.env.BOT_USERNAME,
+              },
+            };
+            const template = event.payload.config.welcome ?? "";
+            const renderedText = renderTemplate(template, context);
             await api.sendMessage(this.env.BOT_TOKEN, {
               chat_id: event.payload.chat,
-              text: event.payload.config.welcome,
+              text: renderedText,
             });
           });
           break;
