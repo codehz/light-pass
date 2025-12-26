@@ -100,9 +100,6 @@ function AdminCard({
               当前问题：
               <span className={tw("text-subtitle-text")}>
                 {config.question}
-                {config.question}
-                {config.question}
-                {config.question}
               </span>
               <br />
             </span>
@@ -270,11 +267,6 @@ function CardLayout({
               "overflow-hidden text-ellipsis whitespace-nowrap font-bold",
             )}
           >
-            {title}
-            {title}
-            {title}
-            {title}
-            {title}
             {title}
           </div>
           <div
