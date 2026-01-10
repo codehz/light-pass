@@ -20,10 +20,12 @@ type Context = {
     last_name: string;
     username: string;
     display_name: string;
+    bio?: string;
   };
   chat: {
     id: number;
     title: string;
+    question: string;
   };
   request: {
     deadline: number;
@@ -34,10 +36,8 @@ type Context = {
     bot_username: string;
   };
   response?: {
-    question: string;
     answer: string;
     details: string;
-    date: number;
   };
 };
 
@@ -74,7 +74,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
    */
   private async buildContext(
     event: Readonly<WorkflowEvent<VerifyUserParams>>,
-    response?: { question: string; answer: string; details: string },
+    response?: { answer: string; details: string },
   ): Promise<Context> {
     // 从 BOT_TOKEN 中提取机器人 ID，用于创建 Durable Object ID
     const botId = this.env.BOT_TOKEN.split(":")[0];
@@ -100,10 +100,12 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
         last_name: userChat.last_name || "",
         username: userChat.username || "",
         display_name: userDisplayName,
+        bio: userChat.bio || "",
       },
       chat: {
         id: event.payload.chat,
         title: chatTitle,
+        question: event.payload.config.question,
       },
       request: {
         deadline: event.payload.deadline,
@@ -119,10 +121,8 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
 
     if (response) {
       context.response = {
-        question: response.question,
         answer: response.answer,
         details: response.details,
-        date: Date.now(),
       };
     }
 
@@ -240,13 +240,14 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
         });
         return;
       }
+      let answer = "(管理员直接批准，未回答问题)";
       // 如果用户回答了，通知群组
       if ("answer" in waitResult) {
+        answer = waitResult.answer.answer;
         groupMessageId = await step.do("Notify user answered", async () => {
           try {
             // 获取用户和群组信息用于模板渲染
             const context = await this.buildContext(event, {
-              question: waitResult.answer.question,
               answer: waitResult.answer.answer,
               details: waitResult.answer.details,
             });
@@ -289,7 +290,10 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
           });
           // 发送欢迎消息到群组
           await step.do("Send welcome to group", async () => {
-            const context = await this.buildContext(event);
+            const context = await this.buildContext(event, {
+              answer,
+              details: "(none)",
+            });
             const template = event.payload.config.welcome ?? "";
             const renderedText = renderTemplate(template, context);
             await api.sendMessage(this.env.BOT_TOKEN, {

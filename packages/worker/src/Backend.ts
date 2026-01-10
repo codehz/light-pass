@@ -97,8 +97,13 @@ export class Backend extends DurableObject<Env> {
       });
       const deadline = new Date(Date.now() + chat.config.timeout * 1000);
       if (exists) {
-        const instance = await this.env.VERIFY.get(exists.workflowId);
-        await instance?.terminate().catch(() => {});
+        let instance;
+        try {
+          instance = await this.env.VERIFY.get(exists.workflowId);
+          await instance?.terminate().catch(() => {});
+        } catch (e) {
+          console.warn("failed to terminate existing workflow", e);
+        }
         await tx
           .update(schema.JoinRequest)
           .set({
@@ -161,6 +166,12 @@ export class Backend extends DurableObject<Env> {
   }
   async getChatTitle(chat: number) {
     return getChatTitle(await this.#getChat(chat));
+  }
+  async getChatConfig(chat: number) {
+    const record = await this.#db.query.Chat.findFirst({
+      where: eq(schema.Chat.id, chat),
+    });
+    return record?.config ?? null;
   }
 
   async getUserStatus(user: number) {
