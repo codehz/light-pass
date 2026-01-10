@@ -8,6 +8,7 @@ const COMMON_VARIABLES: Variable[] = [
   { name: "user.username", description: "用户 @handle" },
   { name: "user.display_name", description: "用户显示名称" },
   { name: "user.bio", description: "用户个人简介" },
+  { name: "@chat.ref", description: "群组引用，自动生成的 MarkdownV2 链接" },
   { name: "chat.id", description: "群组 ID" },
   { name: "chat.title", description: "群组标题" },
   { name: "chat.question", description: "入群问题" },

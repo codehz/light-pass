@@ -24,6 +24,7 @@ type Context = {
     bio?: string;
   };
   chat: {
+    ref: string;
     id: number;
     title: string;
     question: string;
@@ -105,6 +106,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
         bio: userChat.bio || "",
       },
       chat: {
+        ref: `[${chatTitle}](https://t.me/c/${event.payload.chat})`,
         id: event.payload.chat,
         title: chatTitle,
         question: event.payload.config.question,

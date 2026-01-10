@@ -18,12 +18,20 @@ export function renderTemplate(
   return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
     const trimmed = path.trim();
     const raw = trimmed.startsWith("@");
-    const value = getValueByPath(context, trimmed.replace(/^@/, ""));
+    const quota = trimmed.startsWith(">");
+    const value = getValueByPath(context, trimmed.replace(/^[@>]/, ""));
     if (value === undefined) {
       return "";
     }
     const strValue = String(value);
-    return raw ? strValue : escapeValue(strValue);
+    if (raw) {
+      return strValue
+    }
+    const escaped = escapeValue(strValue);
+    if (quota) {
+      return `**>${escaped.replace(/\n/g, "\n>")}\n`;
+    }
+    return escaped;
   });
 }
 
