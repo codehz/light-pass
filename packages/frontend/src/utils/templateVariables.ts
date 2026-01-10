@@ -1,6 +1,7 @@
 import { Variable } from "../components/FormTextareaWithVariables";
 
 const COMMON_VARIABLES: Variable[] = [
+  { name: "@user.ref", description: "用户引用，自动生成的 MarkdownV2 链接" },
   { name: "user.id", description: "用户 ID" },
   { name: "user.first_name", description: "用户名" },
   { name: "user.last_name", description: "用户姓" },

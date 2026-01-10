@@ -68,6 +68,7 @@ export class Looper extends DurableObject<Env> {
     const message = await api.sendMessage(this.env.BOT_TOKEN, {
       chat_id: chat,
       text,
+      parse_mode: "MarkdownV2",
       reply_markup: withOpenAppButton(this.env.BOT_USERNAME),
     });
     console.log("sent message", message);

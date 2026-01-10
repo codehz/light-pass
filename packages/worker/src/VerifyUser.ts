@@ -15,6 +15,7 @@ import { renderTemplate } from "./utils/template";
  */
 type Context = {
   user: {
+    ref: string;
     id: number;
     first_name: string;
     last_name: string;
@@ -95,6 +96,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
 
     const context: Context = {
       user: {
+        ref: `[${userChat.username ? `@${userChat.username}` : userDisplayName}](tg://user?id=${event.payload.user})`,
         id: event.payload.user,
         first_name: userChat.first_name || "",
         last_name: userChat.last_name || "",
@@ -167,6 +169,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
               await api.sendMessage(this.env.BOT_TOKEN, {
                 chat_id: event.payload.userChatId,
                 text: renderedText,
+                parse_mode: "MarkdownV2",
                 reply_markup: withOpenAppButton(this.env.BOT_USERNAME),
               });
             } catch (e) {
@@ -260,6 +263,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
             const sent = await api.sendMessage(this.env.BOT_TOKEN, {
               chat_id: event.payload.chat,
               text: renderedText,
+              parse_mode: "MarkdownV2",
               reply_markup: withOpenAppButton(this.env.BOT_USERNAME),
             });
             return sent.message_id;
@@ -299,6 +303,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
             await api.sendMessage(this.env.BOT_TOKEN, {
               chat_id: event.payload.chat,
               text: renderedText,
+              parse_mode: "MarkdownV2",
             });
           });
           break;
