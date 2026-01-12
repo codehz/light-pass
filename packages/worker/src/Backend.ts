@@ -23,11 +23,26 @@ export class Backend extends DurableObject<Env> {
     this.EncryptCache.defaultTtl = 86400;
   }
 
-  async #getChat(chat_id: number) {
-    return await Backend.ChatCache.wrap(
-      `${chat_id}`,
-      async () => await api.getChat(this.env.BOT_TOKEN, { chat_id }),
-    );
+  async #getChat(chat_id: number): Promise<ChatFullInfo | null> {
+    try {
+      return await Backend.ChatCache.wrap(
+        `${chat_id}`,
+        async () => await api.getChat(this.env.BOT_TOKEN, { chat_id }),
+      );
+    } catch (e) {
+      const error = e as Error;
+      // Bot 被踢出群 - 清理相应的 admin 记录
+      if (error.message.includes("Forbidden")) {
+        console.warn(`Bot kicked from chat ${chat_id}, cleaning up admin records`);
+        await this.#db
+          .delete(schema.ChatAdmin)
+          .where(eq(schema.ChatAdmin.chat, chat_id))
+          .catch(err => console.error("Failed to clean up admin records", err));
+        return null;
+      }
+      // 其他错误继续抛出
+      throw e;
+    }
   }
   async #encrypt(text: string) {
     return await Backend.EncryptCache.wrap(text, async () =>
@@ -165,7 +180,8 @@ export class Backend extends DurableObject<Env> {
     return !!record;
   }
   async getChatTitle(chat: number) {
-    return getChatTitle(await this.#getChat(chat));
+    const fullChat = await this.#getChat(chat);
+    return fullChat ? getChatTitle(fullChat) : "unknown";
   }
   async getChatConfig(chat: number) {
     const record = await this.#db.query.Chat.findFirst({
@@ -201,8 +217,8 @@ export class Backend extends DurableObject<Env> {
           const full = await this.#getChat(chat);
           return {
             id: chat,
-            title: full.type === "supergroup" ? full.title : "unknown",
-            photo: full.photo
+            title: full?.type === "supergroup" ? full.title : "unknown",
+            photo: full?.photo
               ? await this.#encryptor.encrypt(full.photo.big_file_id)
               : undefined,
             config: Chat?.config,
@@ -215,8 +231,8 @@ export class Backend extends DurableObject<Env> {
                         return {
                           user,
                           userBio,
-                          title: getChatTitle(full),
-                          photo: full.photo
+                          title: full ? getChatTitle(full) : "unknown",
+                          photo: full?.photo
                             ? await this.#encrypt(full.photo.big_file_id)
                             : undefined,
                           date: date.getTime(),
@@ -256,8 +272,8 @@ export class Backend extends DurableObject<Env> {
             return {
               id: Chat.id,
               question: Chat.config?.question,
-              title: getChatTitle(full),
-              photo: full.photo
+              title: full ? getChatTitle(full) : "unknown",
+              photo: full?.photo
                 ? await this.#encrypt(full.photo.big_file_id)
                 : undefined,
               answered: !!Response,
