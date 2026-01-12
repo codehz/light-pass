@@ -8,7 +8,7 @@ import { NonRetryableError } from "cloudflare:workflows";
 import { api, BotError } from "./api";
 import { ChatConfig } from "./db";
 import { withOpenAppButton } from "./utils/button";
-import { renderTemplate } from "./utils/template";
+import { escapeValue, renderTemplate } from "./utils/template";
 
 /**
  * 上下文对象类型，用于模板渲染
@@ -97,7 +97,9 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
 
     const context: Context = {
       user: {
-        ref: `[${userChat.username ? `@${userChat.username}` : userDisplayName}](tg://user?id=${event.payload.user})`,
+        ref: userChat.username
+          ? `@${userChat.username}`
+          : `[${escapeValue(userDisplayName)}](tg://user?id=${event.payload.user})`,
         id: event.payload.user,
         first_name: userChat.first_name || "",
         last_name: userChat.last_name || "",
@@ -106,7 +108,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
         bio: userChat.bio || "",
       },
       chat: {
-        ref: `[${chatTitle}](https://t.me/c/${event.payload.chat})`,
+        ref: `[${escapeValue(chatTitle)}](https://t.me/c/${event.payload.chat})`,
         id: event.payload.chat,
         title: chatTitle,
         question: event.payload.config.question,

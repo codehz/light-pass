@@ -53,7 +53,7 @@ function getValueByPath(obj: any, path: string): any {
  * @param mode The escape mode.
  * @returns The escaped string.
  */
-function escapeValue(value: string): string {
+export function escapeValue(value: string): string {
   // Basic Markdown escaping: escape *, _, [, ], (, ), ~, `, >, #, +, -, =, |, {, }, ., !
   return value.replace(/([*_[\]()~`>#+-=|{}.!])/g, "\\$1");
 }
