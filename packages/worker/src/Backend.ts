@@ -11,6 +11,7 @@ import migrations from "./migrations/migrations";
 import { checkChatMember } from "./utils/checkChatMember";
 import { createEncryptor, type Encryptor } from "./utils/encrypt";
 import { AdminAction, VerifyUserParams } from "./VerifyUser";
+import { getChatTitle } from "./utils/chat";
 
 export class Backend extends DurableObject<Env> {
   #db: DrizzleSqliteDODatabase<typeof schema>;
@@ -183,26 +184,15 @@ export class Backend extends DurableObject<Env> {
     });
     return !!record;
   }
-  async getChatTitle(chat: number) {
+  async getChatInfo(chat: number) {
     const fullChat = await this.#getChat(chat);
-    return fullChat ? getChatTitle(fullChat) : "unknown";
+    return fullChat;
   }
   async getChatConfig(chat: number) {
     const record = await this.#db.query.Chat.findFirst({
       where: eq(schema.Chat.id, chat),
     });
     return record?.config ?? null;
-  }
-  async getChatInviteLink(chat: number) {
-    const fullChat = await this.#getChat(chat);
-    if (!fullChat) return null;
-    if ("invite_link" in fullChat && fullChat.invite_link) {
-      return fullChat.invite_link;
-    }
-    if (fullChat.username) {
-      return `https://t.me/${fullChat.username}`;
-    }
-    return null;
   }
 
   async getUserStatus(user: number) {
@@ -397,15 +387,3 @@ export class Backend extends DurableObject<Env> {
     }
   }
 }
-
-function getChatTitle(chat: ChatFullInfo) {
-  switch (chat.type) {
-    case "channel":
-    case "group":
-    case "supergroup":
-      return chat.title;
-    case "private":
-      return chat.first_name + (chat.last_name ? ` ${chat.last_name}` : "");
-  }
-}
-

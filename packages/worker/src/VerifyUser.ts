@@ -1,4 +1,5 @@
 import { type } from "arktype";
+import type { ChatFullInfo } from "@telegraf/types";
 import {
   WorkflowEntrypoint,
   WorkflowEvent,
@@ -8,6 +9,7 @@ import { NonRetryableError } from "cloudflare:workflows";
 import { api, BotError } from "./api";
 import { ChatConfig } from "./db";
 import { withOpenAppButton } from "./utils/button";
+import { getChatInviteLink, getChatTitle } from "./utils/chat";
 import { escapeValue, renderTemplate } from "./utils/template";
 
 /**
@@ -67,33 +69,31 @@ export type AdminAction = typeof AdminAction.infer;
  * VerifyUser 工作流类，用于处理 Telegram 群组加入请求的验证流程
  * 该工作流管理用户回答问题、管理员审批以及超时处理
  */
+/**
+ * 缓存的 chat 信息，用于在 workflow 中复用
+ */
+type CachedChatInfo = {
+  userChat: ChatFullInfo & { type: "private" };
+  chatInfo: ChatFullInfo & { type: "supergroup" };
+  chatTitle: string;
+  userDisplayName: string;
+  chatInviteLink: string | undefined;
+};
+
 export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
   /**
    * 构建上下文对象，用于模板渲染
    * @param event 工作流事件
+   * @param cachedInfo 缓存的 chat 信息
    * @param response 可选的用户回答信息
    * @returns 上下文对象
    */
-  private async buildContext(
+  private buildContext(
     event: Readonly<WorkflowEvent<VerifyUserParams>>,
+    cachedInfo: CachedChatInfo,
     response?: { answer: string; details: string },
-  ): Promise<Context> {
-    // 从 BOT_TOKEN 中提取机器人 ID，用于创建 Durable Object ID
-    const botId = this.env.BOT_TOKEN.split(":")[0];
-    // 创建 Backend Durable Object 的 ID 和实例，用于数据操作
-    const id: DurableObjectId = this.env.BACKEND.idFromName(botId);
-    const Backend = this.env.BACKEND.get(id);
-
-    const userChat = await api.getChat(this.env.BOT_TOKEN, {
-      chat_id: event.payload.userChatId,
-    });
-    if (userChat.type !== "private") {
-      throw new Error("User chat is not private");
-    }
-    const chatTitle = await Backend.getChatTitle(event.payload.chat);
-    const userDisplayName = await Backend.getChatTitle(
-      event.payload.userChatId,
-    );
+  ): Context {
+    const { userChat, chatTitle, userDisplayName } = cachedInfo;
 
     const context: Context = {
       user: {
@@ -149,49 +149,71 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
     // 创建 Backend Durable Object 的 ID 和实例，用于数据操作
     const id: DurableObjectId = this.env.BACKEND.idFromName(botId);
     const Backend = this.env.BACKEND.get(id);
+
+    // 缓存 chat 信息，避免重复调用 API
+    const cachedInfo = await step.do(
+      "Fetch chat info",
+      async (): Promise<CachedChatInfo> => {
+        const [userChat, chatInfo] = await Promise.all([
+          api.getChat(this.env.BOT_TOKEN, {
+            chat_id: event.payload.userChatId,
+          }),
+          api.getChat(this.env.BOT_TOKEN, { chat_id: event.payload.chat }),
+        ]);
+        if (userChat.type !== "private") {
+          throw new NonRetryableError("User chat is not private");
+        }
+        if (chatInfo.type !== "supergroup") {
+          throw new NonRetryableError("Chat is not a supergroup");
+        }
+        return {
+          userChat,
+          chatInfo,
+          chatTitle: getChatTitle(chatInfo),
+          userDisplayName: getChatTitle(userChat),
+          chatInviteLink: getChatInviteLink(chatInfo),
+        };
+      },
+    );
+
     // 发送消息给用户（包装步骤），包含重试逻辑
-    await step.do("Send message to user (wrapper)", async () => {
-      try {
-        await step.do(
-          "Send message to user",
-          {
-            retries: {
-              delay: `1 seconds`,
-              limit: 5,
-              backoff: "linear",
-            },
-          },
-          async () => {
-            try {
-              // 获取用户和群组信息用于模板渲染
-              const context = await this.buildContext(event);
-              const renderedText = renderTemplate(
-                event.payload.config.prompt.text_in_private,
-                context,
-              );
-              // 向用户私聊发送提示消息，并附加打开 Mini App 的按钮
-              await api.sendMessage(this.env.BOT_TOKEN, {
-                chat_id: event.payload.userChatId,
-                text: renderedText,
-                parse_mode: "MarkdownV2",
-                reply_markup: withOpenAppButton(this.env.BOT_USERNAME),
-              });
-            } catch (e) {
-              if (e instanceof BotError && e.retry_after == null) {
-                throw new NonRetryableError(e.message);
-              }
-              throw e;
-            }
-          },
-        );
-      } catch (e) {
-        console.error("failed to send message to user", e);
-      }
-    });
+    await step.do(
+      "Send message to user",
+      {
+        retries: {
+          delay: `1 seconds`,
+          limit: 5,
+          backoff: "linear",
+        },
+      },
+      async () => {
+        try {
+          console.log("send message to user", event.payload.userChatId);
+          // 获取用户和群组信息用于模板渲染
+          const context = this.buildContext(event, cachedInfo);
+          const renderedText = renderTemplate(
+            event.payload.config.prompt.text_in_private,
+            context,
+          );
+          // 向用户私聊发送提示消息，并附加打开 Mini App 的按钮
+          await api.sendMessage(this.env.BOT_TOKEN, {
+            chat_id: event.payload.userChatId,
+            text: renderedText,
+            parse_mode: "MarkdownV2",
+            reply_markup: withOpenAppButton(this.env.BOT_USERNAME),
+          });
+        } catch (e) {
+          if (e instanceof BotError && e.retry_after == null) {
+            throw new NonRetryableError(e.message);
+          }
+          throw e;
+        }
+      },
+    );
     // 通知群组循环器，发送通知消息到群组
     await step.do("Notify chat loop", async () => {
       // 获取上下文用于渲染
-      const context = await this.buildContext(event);
+      const context = this.buildContext(event, cachedInfo);
       const renderedText = renderTemplate(
         event.payload.config.prompt.text_in_group,
         context,
@@ -254,7 +276,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
         groupMessageId = await step.do("Notify user answered", async () => {
           try {
             // 获取用户和群组信息用于模板渲染
-            const context = await this.buildContext(event, {
+            const context = this.buildContext(event, cachedInfo, {
               answer: waitResult.answer.answer,
               details: waitResult.answer.details,
             });
@@ -298,7 +320,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
           });
           // 发送欢迎消息到群组
           await step.do("Send welcome to group", async () => {
-            const context = await this.buildContext(event, {
+            const context = this.buildContext(event, cachedInfo, {
               answer,
               details: "(none)",
             });
@@ -313,18 +335,15 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
           // 发送欢迎消息到用户私聊
           await step.do("Send welcome to user", async () => {
             try {
-              const title = await Backend.getChatTitle(event.payload.chat);
-              const inviteLink = await Backend.getChatInviteLink(
-                event.payload.chat,
-              );
+              const { chatTitle, chatInviteLink } = cachedInfo;
               await api.sendMessage(this.env.BOT_TOKEN, {
                 chat_id: event.payload.userChatId,
-                text: `欢迎加入「${title}」群组！`,
+                text: `欢迎加入「${chatTitle}」群组！`,
                 parse_mode: "MarkdownV2",
-                reply_markup: inviteLink
+                reply_markup: chatInviteLink
                   ? {
                       inline_keyboard: [
-                        [{ text: "进入群组", url: inviteLink }],
+                        [{ text: "进入群组", url: chatInviteLink }],
                       ],
                     }
                   : undefined,
