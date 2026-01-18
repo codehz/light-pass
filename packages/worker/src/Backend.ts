@@ -1,4 +1,4 @@
-import { ChatFullInfo, ChatJoinRequest } from "@telegraf/types";
+import { ChatFullInfo, ChatJoinRequest, type Chat } from "@telegraf/types";
 import { DurableObject } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
@@ -33,11 +33,15 @@ export class Backend extends DurableObject<Env> {
       const error = e as Error;
       // Bot 被踢出群 - 清理相应的 admin 记录
       if (error.message.includes("Forbidden")) {
-        console.warn(`Bot kicked from chat ${chat_id}, cleaning up admin records`);
+        console.warn(
+          `Bot kicked from chat ${chat_id}, cleaning up admin records`,
+        );
         await this.#db
           .delete(schema.ChatAdmin)
           .where(eq(schema.ChatAdmin.chat, chat_id))
-          .catch(err => console.error("Failed to clean up admin records", err));
+          .catch((err) =>
+            console.error("Failed to clean up admin records", err),
+          );
         return null;
       }
       // 其他错误继续抛出
@@ -392,4 +396,11 @@ function getChatTitle(chat: ChatFullInfo) {
     case "private":
       return chat.first_name + (chat.last_name ? ` ${chat.last_name}` : "");
   }
+}
+
+function getChatInviteLink(chat: ChatFullInfo) {
+  if ("invite_link" in chat && chat.invite_link) {
+    return chat.invite_link;
+  }
+  return `https://t.me/${chat.username}`;
 }
