@@ -67,14 +67,56 @@ export default {
       } else if ("message" in update) {
         if (
           update.message.chat.type === "private" &&
-          "text" in update.message &&
-          update.message.text.startsWith("/start")
+          "text" in update.message
         ) {
-          return direct.sendMessage({
-            chat_id: update.message.chat.id,
-            text: "请点击下方按钮启动小程序",
-            reply_markup: withOpenAppButton(env.BOT_USERNAME),
-          });
+          const userId = update.message.from?.id;
+          const messageText = update.message.text;
+
+          if (messageText.startsWith("/start")) {
+            return direct.sendMessage({
+              chat_id: update.message.chat.id,
+              text: "请点击下方按钮启动小程序",
+              reply_markup: withOpenAppButton(env.BOT_USERNAME),
+            });
+          }
+
+          // Check if user has any pending join requests
+          if (userId) {
+            try {
+              const status = await backend.getUserStatus(userId);
+              // Filter to find pending requests (not yet answered)
+              const pendingRequests = status.requests.filter((r) => !r.answered);
+              if (pendingRequests.length > 0) {
+                // User has pending request(s), treat message as answer
+                const request = pendingRequests[0]; // Handle first pending request
+                await backend.handleUserAnswered(
+                  request.id,
+                  userId,
+                  messageText,
+                  JSON.stringify({
+                    method: "direct_message",
+                    chat_id: update.message.chat.id,
+                  }),
+                );
+
+                // Send confirmation message
+                return direct.sendMessage({
+                  chat_id: update.message.chat.id,
+                  text: `✅ 你申请加入「${request.title}」的回答已收到，请等待管理员审核。`,
+                  reply_markup: withOpenAppButton(env.BOT_USERNAME),
+                });
+              } else {
+                // No pending requests
+                return direct.sendMessage({
+                  chat_id: update.message.chat.id,
+                  text: "当前暂无待处理的加群请求，或请求已过期。",
+                  reply_markup: withOpenAppButton(env.BOT_USERNAME),
+                });
+              }
+            } catch (e) {
+              console.error("Error processing direct message answer", e);
+            }
+          }
         }
         return new Response("OK");
       }
