@@ -310,6 +310,29 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
               parse_mode: "MarkdownV2",
             });
           });
+          // 发送欢迎消息到用户私聊
+          await step.do("Send welcome to user", async () => {
+            try {
+              const title = await Backend.getChatTitle(event.payload.chat);
+              const inviteLink = await Backend.getChatInviteLink(
+                event.payload.chat,
+              );
+              await api.sendMessage(this.env.BOT_TOKEN, {
+                chat_id: event.payload.userChatId,
+                text: `欢迎加入「${title}」群组！`,
+                parse_mode: "MarkdownV2",
+                reply_markup: inviteLink
+                  ? {
+                      inline_keyboard: [
+                        [{ text: "进入群组", url: inviteLink }],
+                      ],
+                    }
+                  : undefined,
+              });
+            } catch (e) {
+              console.error("failed to send welcome message to user", e);
+            }
+          });
           break;
         case "declined by admin":
           // 拒绝用户加入

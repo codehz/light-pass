@@ -193,6 +193,17 @@ export class Backend extends DurableObject<Env> {
     });
     return record?.config ?? null;
   }
+  async getChatInviteLink(chat: number) {
+    const fullChat = await this.#getChat(chat);
+    if (!fullChat) return null;
+    if ("invite_link" in fullChat && fullChat.invite_link) {
+      return fullChat.invite_link;
+    }
+    if (fullChat.username) {
+      return `https://t.me/${fullChat.username}`;
+    }
+    return null;
+  }
 
   async getUserStatus(user: number) {
     const [admins, requests] = await Promise.all([
@@ -398,9 +409,3 @@ function getChatTitle(chat: ChatFullInfo) {
   }
 }
 
-function getChatInviteLink(chat: ChatFullInfo) {
-  if ("invite_link" in chat && chat.invite_link) {
-    return chat.invite_link;
-  }
-  return `https://t.me/${chat.username}`;
-}
