@@ -98,7 +98,7 @@ export class Backend extends DurableObject<Env> {
     const context = {
       user: {
         ref: request.from.username
-          ? `@${request.from.username}`
+          ? `@${escapeValue(request.from.username)}`
           : `[${escapeValue(userDisplayName)}](tg://user?id=${request.from.id})`,
         id: request.from.id,
         first_name: request.from.first_name || "",
