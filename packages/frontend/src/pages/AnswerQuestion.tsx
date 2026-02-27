@@ -1,8 +1,6 @@
 import { useFormFieldProxy, useFormRoot } from "@codehz/form";
 import { RiMailSendFill } from "@remixicon/react";
-import { hapticFeedback, popup } from "@telegram-apps/sdk-react";
 import { tw } from "bun-tailwindcss" with { type: "macro" };
-import { toast } from "sonner";
 import { Button } from "../components/Button";
 import { Fieldset } from "../components/Fieldset";
 import { FormTextarea } from "../components/FormTextarea";
@@ -11,8 +9,8 @@ import { SafeAreaPage } from "../components/SafeAreaPage";
 import { useNavigatePop } from "../components/StackNavigator";
 import { SubTitle } from "../components/SubTitle";
 import { useAsyncState } from "../hooks/useAsyncState";
+import { useStatusRpcAction } from "../hooks/useStatusRpcAction";
 import { rpc } from "../rpc";
-import { useQueryClient } from "@tanstack/react-query";
 
 export function AnswerQuestion({
   chat,
@@ -25,11 +23,11 @@ export function AnswerQuestion({
   photo?: string;
   question: string;
 }) {
-  const client = useQueryClient();
   const root = useFormRoot({ values: { answer: "" } });
   const proxy = useFormFieldProxy(root);
   const pop = useNavigatePop();
   const [submitting, start] = useAsyncState();
+  const runStatusAction = useStatusRpcAction();
   return (
     <SafeAreaPage title="入群审核">
       <form
@@ -37,20 +35,16 @@ export function AnswerQuestion({
         onSubmit={async (e) => {
           e.preventDefault();
           using _ = start();
-          try {
-            const { answer } = root.reconstruct();
-            await rpc.answer({ chat, answer });
-            hapticFeedback.notificationOccurred.ifAvailable("success");
-            await client.refetchQueries({ queryKey: ["status"] })
-            toast("已提交");
+          const { answer } = root.reconstruct();
+          const ok = await runStatusAction(
+            () => rpc.answer({ chat, answer }),
+            {
+              successText: "已提交",
+              errorTitle: "保存失败",
+            },
+          );
+          if (ok) {
             pop();
-          } catch (e) {
-            hapticFeedback.notificationOccurred.ifAvailable("error");
-            if (popup.show.isAvailable())
-              await popup
-                .show({ title: "保存失败", message: `${e}` })
-                .catch(() => {});
-            else alert(`${e}`);
           }
         }}
       >

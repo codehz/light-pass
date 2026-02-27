@@ -6,8 +6,8 @@ import {
   WorkflowStep,
 } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
+import type { AdminAction, ChatConfig } from "../../shared/src/contracts";
 import { api, BotError } from "./api";
-import { ChatConfig } from "./db";
 import { withOpenAppButton } from "./utils/button";
 import { getChatInviteLink, getChatTitle } from "./utils/chat";
 import { escapeValue, renderTemplate } from "./utils/template";
@@ -59,11 +59,9 @@ export type VerifyUserParams = {
 /**
  * 管理员操作类型
  */
-export const AdminAction = type({ type: "'approved by admin'" })
+export const AdminActionSchema = type({ type: "'approved by admin'" })
   .or({ type: "'declined by admin'" })
   .or({ type: "'banned by admin'" });
-
-export type AdminAction = typeof AdminAction.infer;
 
 /**
  * VerifyUser 工作流类，用于处理 Telegram 群组加入请求的验证流程

@@ -1,9 +1,7 @@
 import { useFormFieldProxy, useFormRoot } from "@codehz/form";
 import { RiSave2Fill } from "@remixicon/react";
-import { useQueryClient } from "@tanstack/react-query";
-import { hapticFeedback, popup } from "@telegram-apps/sdk-react";
+import { DEFAULT_RESPONSE_TEMPLATE } from "../../../shared/src/contracts";
 import { tw } from "bun-tailwindcss" with { type: "macro" };
-import { toast } from "sonner";
 import { Button } from "../components/Button";
 import { Fieldset } from "../components/Fieldset";
 import { FormInput } from "../components/FormInput";
@@ -14,6 +12,7 @@ import { SafeAreaPage } from "../components/SafeAreaPage";
 import { useNavigatePop } from "../components/StackNavigator";
 import { FormTextareaWithVariables } from "../components/FormTextareaWithVariables";
 import { useAsyncState } from "../hooks/useAsyncState";
+import { useStatusRpcAction } from "../hooks/useStatusRpcAction";
 import { ChatConfig, rpc } from "../rpc";
 import { SubTitle } from "../components/SubTitle";
 import {
@@ -34,7 +33,6 @@ export function ChatSettings({
   title: string;
   photo?: string;
 }) {
-  const client = useQueryClient();
   const root = useFormRoot<ChatConfig>({
     values: initial ?? {
       question: "",
@@ -44,12 +42,13 @@ export function ChatSettings({
         text_in_private: "",
         text_in_group: "",
       },
-      response_template: "用户{{user.display_name}}回答：\n{{response.answer}}",
+      response_template: DEFAULT_RESPONSE_TEMPLATE,
     },
   });
   const proxy = useFormFieldProxy(root);
   const pop = useNavigatePop();
   const [saving, start] = useAsyncState();
+  const runStatusAction = useStatusRpcAction();
   return (
     <SafeAreaPage title="配置群组">
       <SubTitle>
@@ -61,19 +60,15 @@ export function ChatSettings({
         onSubmit={async (e) => {
           e.preventDefault();
           using _ = start();
-          try {
-            await rpc.updateChatConfig({ chat, config: root.reconstruct() });
-            hapticFeedback.notificationOccurred.ifAvailable("success");
-            await client.refetchQueries({ queryKey: ["status"] });
-            toast("已保存");
+          const ok = await runStatusAction(
+            () => rpc.updateChatConfig({ chat, config: root.reconstruct() }),
+            {
+              successText: "已保存",
+              errorTitle: "保存失败",
+            },
+          );
+          if (ok) {
             pop();
-          } catch (e) {
-            hapticFeedback.notificationOccurred.ifAvailable("error");
-            if (popup.show.isAvailable())
-              await popup
-                .show({ title: "保存失败", message: `${e}` })
-                .catch(() => {});
-            else alert(`${e}`);
           }
         }}
         className={tw("mt-4 grid gap-4")}

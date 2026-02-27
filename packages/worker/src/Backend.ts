@@ -1,17 +1,34 @@
-import { ChatFullInfo, ChatJoinRequest, type Chat } from "@telegraf/types";
+import { ChatFullInfo, ChatJoinRequest } from "@telegraf/types";
 import { DurableObject } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { nanoid } from "nanoid";
+import type { AdminAction, RpcStatus } from "../../shared/src/contracts";
 import { WorkersCacheStorage } from "workers-cache-storage";
-import { api } from "./api";
+import { api, BotError } from "./api";
 import * as schema from "./db";
 import migrations from "./migrations/migrations";
+import {
+  clearJoinResponse,
+  deleteJoinRequest,
+  findChatById,
+  findJoinRequest,
+  findJoinRequestWithChat,
+  findLatestPendingJoinRequest,
+  insertJoinResponse,
+  upsertJoinRequest,
+} from "./services/JoinRequestRepository";
+import {
+  handleJoinRequestByMode,
+  orchestrateFormJoinRequest,
+} from "./services/JoinRequestFlow";
+import { projectUserStatus } from "./services/StatusProjector";
+import { VerificationCoordinator } from "./services/VerificationCoordinator";
+import { getChatInviteLink, getChatTitle } from "./utils/chat";
 import { checkChatMember } from "./utils/checkChatMember";
 import { createEncryptor, type Encryptor } from "./utils/encrypt";
-import { AdminAction, VerifyUserParams } from "./VerifyUser";
-import { getChatTitle } from "./utils/chat";
+import { escapeValue, renderTemplate } from "./utils/template";
 
 export class Backend extends DurableObject<Env> {
   #db: DrizzleSqliteDODatabase<typeof schema>;
@@ -32,7 +49,6 @@ export class Backend extends DurableObject<Env> {
       );
     } catch (e) {
       const error = e as Error;
-      // Bot 被踢出群 - 清理相应的 admin 记录
       if (error.message.includes("Forbidden")) {
         console.warn(
           `Bot kicked from chat ${chat_id}, cleaning up admin records`,
@@ -45,14 +61,97 @@ export class Backend extends DurableObject<Env> {
           );
         return null;
       }
-      // 其他错误继续抛出
       throw e;
     }
   }
+
   async #encrypt(text: string) {
     return await Backend.EncryptCache.wrap(text, async () =>
       this.#encryptor.encrypt(text),
     );
+  }
+
+  async #handlePassJoinRequest(
+    request: ChatJoinRequest,
+    config: schema.ChatConfig,
+  ) {
+    try {
+      await api.approveChatJoinRequest(this.env.BOT_TOKEN, {
+        chat_id: request.chat.id,
+        user_id: request.from.id,
+      });
+    } catch (e) {
+      if (e instanceof BotError) {
+        if (e.message.includes("USER_ALREADY_PARTICIPANT")) return;
+        if (e.code === 400) return;
+      }
+      throw e;
+    }
+
+    const fullChat = await this.#getChat(request.chat.id).catch(() => null);
+    const chatTitle = fullChat ? getChatTitle(fullChat) : request.chat.title;
+    const userDisplayName =
+      [request.from.first_name, request.from.last_name]
+        .filter(Boolean)
+        .join(" ") || request.from.username || `${request.from.id}`;
+    const deadline = Date.now() + config.timeout * 1000;
+    const context = {
+      user: {
+        ref: request.from.username
+          ? `@${request.from.username}`
+          : `[${escapeValue(userDisplayName)}](tg://user?id=${request.from.id})`,
+        id: request.from.id,
+        first_name: request.from.first_name || "",
+        last_name: request.from.last_name || "",
+        username: request.from.username || "",
+        display_name: userDisplayName,
+        bio: request.bio || "",
+      },
+      chat: {
+        ref: `[${escapeValue(chatTitle)}](https://t.me/c/${request.chat.id})`,
+        id: request.chat.id,
+        title: chatTitle,
+        question: config.question,
+      },
+      request: {
+        deadline,
+        date: Date.now(),
+      },
+      meta: {
+        deadline_formatted: new Date(deadline).toLocaleString("zh-CN"),
+        bot_username: this.env.BOT_USERNAME,
+      },
+      response: {
+        answer: "(自动通过，无需回答)",
+        details: "(none)",
+      },
+    };
+
+    const renderedWelcome = renderTemplate(config.welcome, context).trim();
+    const groupWelcomeText =
+      renderedWelcome || `欢迎 ${userDisplayName} 加入「${chatTitle}」`;
+
+    await api
+      .sendMessage(this.env.BOT_TOKEN, {
+        chat_id: request.chat.id,
+        text: groupWelcomeText,
+        parse_mode: renderedWelcome ? "MarkdownV2" : undefined,
+      })
+      .catch((e) => console.error("failed to send pass welcome to group", e));
+
+    const inviteLink =
+      fullChat?.type === "supergroup" ? getChatInviteLink(fullChat) : undefined;
+    await api
+      .sendMessage(this.env.BOT_TOKEN, {
+        chat_id: request.user_chat_id,
+        text: `你加入「${chatTitle}」的申请已自动通过。`,
+        reply_markup: inviteLink
+          ? {
+              inline_keyboard: [[{ text: "进入群组", url: inviteLink }]],
+            }
+          : undefined,
+      })
+      .catch((e) => console.error("failed to send pass welcome to user", e));
   }
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -95,79 +194,41 @@ export class Backend extends DurableObject<Env> {
   }
 
   async handleChatJoinRequest(request: ChatJoinRequest) {
-    await this.#db.transaction(async (tx) => {
-      const chat = await tx.query.Chat.findFirst({
-        where: eq(schema.Chat.id, request.chat.id),
-      });
-      if (!chat || !chat.config || chat.mode === "IGNORE") return;
-      const workflowId = nanoid();
-      await tx
-        .delete(schema.JoinResponse)
-        .where(
-          and(
-            eq(schema.JoinResponse.chat, chat.id),
-            eq(schema.JoinResponse.user, request.from.id),
-          ),
-        );
-      const exists = await tx.query.JoinRequest.findFirst({
-        where: and(
-          eq(schema.JoinRequest.chat, chat.id),
-          eq(schema.JoinRequest.user, request.from.id),
-        ),
-      });
-      const deadline = new Date(Date.now() + chat.config.timeout * 1000);
-      if (exists) {
-        let instance;
-        try {
-          instance = await this.env.VERIFY.get(exists.workflowId);
-          await instance?.terminate().catch(() => {});
-        } catch (e) {
-          console.warn("failed to terminate existing workflow", e);
-        }
-        await tx
-          .update(schema.JoinRequest)
-          .set({
-            date: new Date(),
-            deadline,
-            userChatId: request.user_chat_id,
-            userBio: request.bio,
-            workflowId,
-          })
-          .where(
-            and(
-              eq(schema.JoinRequest.chat, chat.id),
-              eq(schema.JoinRequest.user, request.from.id),
-            ),
-          );
-      } else {
-        await tx.insert(schema.JoinRequest).values({
-          date: new Date(),
-          deadline,
-          chat: chat.id,
-          user: request.from.id,
-          userChatId: request.user_chat_id,
-          userBio: request.bio,
-          workflowId,
+    const chat = await findChatById(this.#db, request.chat.id);
+    const verification = new VerificationCoordinator(this.env.VERIFY);
+    await handleJoinRequestByMode(request, chat ?? null, {
+      onPass: async (passRequest, config) => {
+        await this.#handlePassJoinRequest(passRequest, config);
+      },
+      onForm: async (formRequest, formChat) => {
+        await this.#db.transaction(async (tx) => {
+          await orchestrateFormJoinRequest(formRequest, formChat, {
+            createWorkflowId: () => nanoid(),
+            now: () => new Date(),
+            clearJoinResponse: (joinChat, user) =>
+              clearJoinResponse(tx, joinChat, user),
+            findExistingJoinRequest: async (joinChat, user) =>
+              (await findJoinRequest(tx, joinChat, user)) ?? null,
+            terminateExistingWorkflow: (workflowId) =>
+              verification.terminate(workflowId),
+            upsertJoinRequest: async (payload) => {
+              await upsertJoinRequest(tx, payload);
+            },
+            createWorkflow: (workflowId, params) =>
+              verification.create(workflowId, params),
+          });
         });
-      }
-      await this.env.VERIFY.create({
-        id: workflowId,
-        params: {
-          chat: chat.id,
-          user: request.from.id,
-          userChatId: request.user_chat_id,
-          config: chat.config,
-          deadline: deadline.getTime(),
-        } satisfies VerifyUserParams,
-      });
+      },
     });
   }
+
   async addAdmin(chat: number, user: number) {
     await this.#db
       .insert(schema.ChatAdmin)
       .values({ chat, user })
       .onConflictDoNothing();
   }
+
   async removeAdmin(chat: number, user: number) {
     await this.#db
       .delete(schema.ChatAdmin)
@@ -175,6 +236,7 @@ export class Backend extends DurableObject<Env> {
         and(eq(schema.ChatAdmin.chat, chat), eq(schema.ChatAdmin.user, user)),
       );
   }
+
   async checkChatAdmin(chat: number, user: number) {
     const record = await this.#db.query.ChatAdmin.findFirst({
       where: and(
@@ -184,10 +246,12 @@ export class Backend extends DurableObject<Env> {
     });
     return !!record;
   }
+
   async getChatInfo(chat: number) {
     const fullChat = await this.#getChat(chat);
     return fullChat;
   }
+
   async getChatConfig(chat: number) {
     const record = await this.#db.query.Chat.findFirst({
       where: eq(schema.Chat.id, chat),
@@ -195,107 +259,31 @@ export class Backend extends DurableObject<Env> {
     return record?.config ?? null;
   }
 
-  async getUserStatus(user: number) {
-    const [admins, requests] = await Promise.all([
-      this.#db.query.ChatAdmin.findMany({
-        where: eq(schema.ChatAdmin.user, user),
-        with: {
-          Chat: {
-            with: {
-              JoinRequests: true,
-              JoinResponses: true,
-            },
-          },
-        },
-      }),
-      this.#db.query.JoinRequest.findMany({
-        where: eq(schema.JoinRequest.user, user),
-        with: {
-          Chat: true,
-          Response: true,
-        },
-      }),
-    ]);
-    return {
-      admins: await Promise.all(
-        admins.map(async ({ chat, Chat }) => {
-          const full = await this.#getChat(chat);
-          return {
-            id: chat,
-            title: full?.type === "supergroup" ? full.title : "unknown",
-            photo: full?.photo
-              ? await this.#encryptor.encrypt(full.photo.big_file_id)
-              : undefined,
-            config: Chat?.config,
-            requests: Chat
-              ? await Promise.all(
-                  Chat.JoinRequests.map(
-                    async ({ user, userBio, userChatId, date, deadline }) => {
-                      try {
-                        const full = await this.#getChat(userChatId);
-                        return {
-                          user,
-                          userBio,
-                          title: full ? getChatTitle(full) : "unknown",
-                          photo: full?.photo
-                            ? await this.#encrypt(full.photo.big_file_id)
-                            : undefined,
-                          date: date.getTime(),
-                          deadline: deadline.getTime(),
-                        };
-                      } catch (e) {
-                        return {
-                          user,
-                          userBio,
-                          title: `unknown (${e})`,
-                          photo: undefined,
-                          date: date.getTime(),
-                          deadline: deadline.getTime(),
-                        };
-                      }
-                    },
-                  ),
-                )
-              : [],
-            responses:
-              Chat?.JoinResponses.map(
-                ({ user, date, answer, details, question }) => ({
-                  user,
-                  date: date.getTime(),
-                  answer,
-                  details,
-                  question,
-                }),
-              ) ?? [],
-          };
-        }),
-      ),
-      requests: await Promise.all(
-        requests.map(async ({ Chat, Response }) => {
-          try {
-            const full = await this.#getChat(Chat.id);
-            return {
-              id: Chat.id,
-              question: Chat.config?.question,
-              title: full ? getChatTitle(full) : "unknown",
-              photo: full?.photo
-                ? await this.#encrypt(full.photo.big_file_id)
-                : undefined,
-              answered: !!Response,
-            };
-          } catch (e) {
-            return {
-              id: Chat.id,
-              question: Chat.config?.question,
-              title: `unknown (${e})`,
-              photo: undefined,
-              answered: !!Response,
-            };
-          }
-        }),
-      ),
-    };
+  async getUserStatus(user: number): Promise<RpcStatus> {
+    return await projectUserStatus(this.#db, user, {
+      getChat: (chatId) => this.#getChat(chatId),
+      encrypt: (text) => this.#encrypt(text),
+      encryptNoCache: (text) => this.#encryptor.encrypt(text),
+    });
   }
+
+  async getLatestPendingJoinRequest(user: number) {
+    const pending = await findLatestPendingJoinRequest(this.#db, user);
+    if (!pending) return null;
+    try {
+      const full = await this.#getChat(pending.Chat.id);
+      return {
+        id: pending.Chat.id,
+        title: full ? getChatTitle(full) : "unknown",
+      };
+    } catch (e) {
+      return {
+        id: pending.Chat.id,
+        title: `unknown (${e})`,
+      };
+    }
+  }
+
   async updateChatConfig(
     chat: number,
     config: schema.ChatConfig,
@@ -311,14 +299,7 @@ export class Backend extends DurableObject<Env> {
   }
 
   async removeJoinRequest(chat: number, user: number) {
-    await this.#db
-      .delete(schema.JoinRequest)
-      .where(
-        and(
-          eq(schema.JoinRequest.chat, chat),
-          eq(schema.JoinRequest.user, user),
-        ),
-      );
+    await deleteJoinRequest(this.#db, chat, user);
   }
 
   async handleUserAnswered(
@@ -327,21 +308,16 @@ export class Backend extends DurableObject<Env> {
     answer: string,
     details: string,
   ) {
+    const verification = new VerificationCoordinator(this.env.VERIFY);
     await this.#db.transaction(async (tx) => {
-      const found = await tx.query.JoinRequest.findFirst({
-        where: and(
-          eq(schema.JoinRequest.chat, chat),
-          eq(schema.JoinRequest.user, user),
-        ),
-        with: { Chat: true },
-      });
+      const found = await findJoinRequestWithChat(tx, chat, user);
       if (!found?.Chat.config) {
         console.error("invalid join request", found);
-        await this.removeJoinRequest(chat, user);
+        await deleteJoinRequest(tx, chat, user);
         return;
       }
       try {
-        await tx.insert(schema.JoinResponse).values({
+        await insertJoinResponse(tx, {
           chat,
           user,
           answer,
@@ -349,14 +325,10 @@ export class Backend extends DurableObject<Env> {
           details,
           question: found.Chat.config.question,
         });
-        const workflow = await this.env.VERIFY.get(found.workflowId);
-        await workflow.sendEvent({
-          type: "user_answer",
-          payload: {
-            answer,
-            details,
-            question: found.Chat.config.question,
-          },
+        await verification.sendUserAnswer(found.workflowId, {
+          answer,
+          details,
+          question: found.Chat.config.question,
         });
       } catch (e) {
         console.error("failed to send user answer", e);
@@ -365,25 +337,19 @@ export class Backend extends DurableObject<Env> {
   }
 
   async handleAdminAction(chat: number, user: number, action: AdminAction) {
-    const found = await this.#db.query.JoinRequest.findFirst({
-      where: and(
-        eq(schema.JoinRequest.chat, chat),
-        eq(schema.JoinRequest.user, user),
-      ),
-      with: { Chat: true },
-    });
+    const found = await findJoinRequestWithChat(this.#db, chat, user);
+    const verification = new VerificationCoordinator(this.env.VERIFY);
     try {
       if (!found?.Chat.config) {
         console.error("invalid join request", found);
         throw new Error("invalid join request");
       }
-      const workflow = await this.env.VERIFY.get(found.workflowId);
-      await workflow.sendEvent({ type: "admin_action", payload: action });
+      await verification.sendAdminAction(found.workflowId, action);
     } catch (e) {
       console.error("failed to send admin action", e);
       throw e;
     } finally {
-      await this.removeJoinRequest(chat, user);
+      await deleteJoinRequest(this.#db, chat, user);
     }
   }
 }

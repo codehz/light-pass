@@ -3,7 +3,7 @@ import {
   RiReplyFill,
   RiSettingsFill,
 } from "@remixicon/react";
-import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { tw } from "bun-tailwindcss" with { type: "macro" };
 import { ReactNode, use, useMemo } from "react";
 import { Button } from "../components/Button";
@@ -15,6 +15,7 @@ import { rpc, type RpcStatus } from "../rpc";
 import { AnswerQuestion } from "./AnswerQuestion";
 import { ChatSettings } from "./ChatSettings";
 import { WaitContext } from "../components/WaitHost";
+import { useStatusRpcAction } from "../hooks/useStatusRpcAction";
 
 export function Status() {
   const {
@@ -24,7 +25,6 @@ export function Status() {
     queryFn: () => rpc.status(),
   });
   const children: ReactNode[] = [];
-  const push = useNavigatePush();
   if (requests.length) {
     children.push(
       <div key="requests" className={tw("mt-2")}>
@@ -96,7 +96,7 @@ function AdminCard({
       description={
         <>
           {config && (
-            <span className={tw("whitespace-nowrap text-sm")}>
+            <span className={tw("text-sm whitespace-nowrap")}>
               当前问题：
               <span className={tw("text-subtitle-text")}>
                 {config.question}
@@ -104,7 +104,7 @@ function AdminCard({
               <br />
             </span>
           )}
-          <span className={tw("text-subtitle-text text-sm")}>
+          <span className={tw("text-sm text-subtitle-text")}>
             {requests.length}个入群请求，{responses.length}个已回答
           </span>
         </>
@@ -112,11 +112,11 @@ function AdminCard({
     >
       {requests.length > 0 && (
         <>
-          <div className={tw("text-subtitle-text border-b mt-2 text-xs")}>
+          <div className={tw("mt-2 border-b text-xs text-subtitle-text")}>
             入群请求列表（点击头像查看详情）
           </div>
           <div
-            className={tw("divide-subtitle-text grid gap-1 divide-y pl-3 pt-2")}
+            className={tw("grid gap-1 divide-y divide-subtitle-text pt-2 pl-3")}
           >
             {requests.map((request) => (
               <AdminRequestItem
@@ -145,20 +145,40 @@ function AdminRequestItem({
   response?: RpcStatus.Admin.Response;
   chat: number;
 }) {
-  const client = useQueryClient();
   const wait = use(WaitContext);
+  const runStatusAction = useStatusRpcAction();
+
+  async function runAdminAction(
+    action: "approved by admin" | "declined by admin" | "banned by admin",
+    successText: string,
+  ) {
+    using _ = wait();
+    await runStatusAction(
+      () =>
+        rpc.adminAction({
+          chat,
+          user,
+          action: { type: action },
+        }),
+      {
+        successText,
+        errorTitle: "操作失败",
+      },
+    );
+  }
+
   return (
     <div className={tw("grid grid-cols-[auto_minmax(0,1fr)] gap-2 px-1 pb-1")}>
       <MaybePhoto photo={photo} className={tw("size-8 rounded-full")} />
       <div className={tw("grid")}>
         <div
           className={tw(
-            "overflow-hidden text-ellipsis whitespace-nowrap text-xs font-bold",
+            "overflow-hidden text-xs font-bold text-ellipsis whitespace-nowrap",
           )}
         >
           {title}
         </div>
-        <div className={tw("text-subtitle-text flex flex-wrap gap-1 text-xs")}>
+        <div className={tw("flex flex-wrap gap-1 text-xs text-subtitle-text")}>
           <span>
             <RelativeTime time={date} />
             加入
@@ -178,7 +198,7 @@ function AdminRequestItem({
         {response && (
           <div
             className={tw(
-              "overflow-hidden text-ellipsis whitespace-nowrap text-xs",
+              "overflow-hidden text-xs text-ellipsis whitespace-nowrap",
             )}
           >
             回答：
@@ -191,45 +211,27 @@ function AdminRequestItem({
           <Button
             variant="solid"
             color="accent"
-            onClick={async () => {
-              using _ = wait();
-              await rpc.adminAction({
-                chat,
-                user,
-                action: { type: "approved by admin" },
-              });
-              await client.refetchQueries({ queryKey: ["status"] });
-            }}
+            onClick={() =>
+              runAdminAction("approved by admin", "已通过该入群请求")
+            }
           >
             通过
           </Button>
           <Button
             variant="solid"
             color="destructive"
-            onClick={async () => {
-              using _ = wait();
-              await rpc.adminAction({
-                chat,
-                user,
-                action: { type: "declined by admin" },
-              });
-              await client.refetchQueries({ queryKey: ["status"] });
-            }}
+            onClick={() =>
+              runAdminAction("declined by admin", "已拒绝该入群请求")
+            }
           >
             拒绝
           </Button>
           <Button
             variant="solid"
             color="destructive"
-            onClick={async () => {
-              using _ = wait();
-              await rpc.adminAction({
-                chat,
-                user,
-                action: { type: "banned by admin" },
-              });
-              await client.refetchQueries({ queryKey: ["status"] });
-            }}
+            onClick={() =>
+              runAdminAction("banned by admin", "已封禁并拒绝该入群请求")
+            }
           >
             封禁
           </Button>
@@ -258,13 +260,13 @@ function CardLayout({
 }) {
   const push = useNavigatePush();
   return (
-    <div className={tw("bg-secondary-bg rounded-2xl p-2")}>
+    <div className={tw("rounded-2xl bg-secondary-bg p-2")}>
       <div className={tw("grid grid-cols-[auto_minmax(0,1fr)] gap-2")}>
         <MaybePhoto photo={photo} className={tw("size-12 rounded-full")} />
         <div className={tw("grid")}>
           <div
             className={tw(
-              "overflow-hidden text-ellipsis whitespace-nowrap font-bold",
+              "overflow-hidden font-bold text-ellipsis whitespace-nowrap",
             )}
           >
             {title}

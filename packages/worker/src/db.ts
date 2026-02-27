@@ -1,5 +1,6 @@
 import { type } from "arktype";
 import { relations } from "drizzle-orm";
+import type { ChatConfig as SharedChatConfig, ChatMode } from "../../shared/src/contracts";
 import {
   customType,
   foreignKey,
@@ -9,7 +10,7 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-type Mode = "FORM" | "PASS" | "IGNORE";
+type Mode = ChatMode;
 
 const timestamp = customType<{ data: Date; driverData: number }>({
   dataType: () => "integer",
@@ -30,7 +31,7 @@ export const ChatConfig = type({
   prompt: PromptConfig,
   response_template: "string",
 });
-export type ChatConfig = typeof ChatConfig.infer;
+export type ChatConfig = SharedChatConfig;
 const $ChatConfig = customType<{ data: ChatConfig; driverData: string }>({
   dataType: () => "text",
   fromDriver: (value) => {

@@ -4,6 +4,7 @@ import classNames from "classnames";
 import { nanoid } from "nanoid";
 import {
   AnimationEvent,
+  CSSProperties,
   createContext,
   DependencyList,
   Dispatch,
@@ -249,7 +250,7 @@ function PageRenderer({
           style={{
             "--reveal-x": `${page.options.x}px`,
             "--reveal-y": `${page.options.y}px`,
-          }}
+          } as CSSProperties}
         >
           <AnimatedSuspense
             fallback={
