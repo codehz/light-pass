@@ -1,7 +1,10 @@
 import { eq } from "drizzle-orm";
 import type { ChatFullInfo } from "@telegraf/types";
 import type { DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
-import type { RpcStatus } from "../../../shared/src/contracts";
+import {
+  DEFAULT_ANSWER_CONSTRAINTS,
+  type RpcStatus,
+} from "../../../shared/src/contracts";
 import * as schema from "../db";
 import { getChatTitle } from "../utils/chat";
 
@@ -95,19 +98,23 @@ export async function projectUserStatus(
       requests.map(async ({ Chat, Response }) => {
         try {
           const full = await deps.getChat(Chat.id);
-            return {
-              id: Chat.id,
-              question: Chat.config?.question ?? "",
-              title: full ? getChatTitle(full) : "unknown",
-              photo: full?.photo
-                ? await deps.encrypt(full.photo.big_file_id)
-                : undefined,
-              answered: !!Response,
+          return {
+            id: Chat.id,
+            question: Chat.config?.question ?? "",
+            answer_constraints:
+              Chat.config?.answer_constraints ?? DEFAULT_ANSWER_CONSTRAINTS,
+            title: full ? getChatTitle(full) : "unknown",
+            photo: full?.photo
+              ? await deps.encrypt(full.photo.big_file_id)
+              : undefined,
+            answered: !!Response,
           };
         } catch (e) {
           return {
             id: Chat.id,
             question: Chat.config?.question ?? "",
+            answer_constraints:
+              Chat.config?.answer_constraints ?? DEFAULT_ANSWER_CONSTRAINTS,
             title: `unknown (${e})`,
             photo: undefined,
             answered: !!Response,

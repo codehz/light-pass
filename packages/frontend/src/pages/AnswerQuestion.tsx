@@ -1,5 +1,6 @@
 import { useFormFieldProxy, useFormRoot } from "@codehz/form";
 import { RiMailSendFill } from "@remixicon/react";
+import { validateAnswer } from "../../../shared/src/answerConstraints";
 import { tw } from "bun-tailwindcss" with { type: "macro" };
 import { Button } from "../components/Button";
 import { Fieldset } from "../components/Fieldset";
@@ -10,18 +11,20 @@ import { useNavigatePop } from "../components/StackNavigator";
 import { SubTitle } from "../components/SubTitle";
 import { useAsyncState } from "../hooks/useAsyncState";
 import { useStatusRpcAction } from "../hooks/useStatusRpcAction";
-import { rpc } from "../rpc";
+import { rpc, type RpcStatus } from "../rpc";
 
 export function AnswerQuestion({
   chat,
   title,
   photo,
   question,
+  answerConstraints,
 }: {
   chat: number;
   title: string;
   photo?: string;
   question: string;
+  answerConstraints: RpcStatus.Request["answer_constraints"];
 }) {
   const root = useFormRoot({ values: { answer: "" } });
   const proxy = useFormFieldProxy(root);
@@ -36,6 +39,18 @@ export function AnswerQuestion({
           e.preventDefault();
           using _ = start();
           const { answer } = root.reconstruct();
+          const validation = validateAnswer(answer, answerConstraints);
+          if (!validation.ok) {
+            await runStatusAction(
+              async () => {
+                throw new Error(validation.message);
+              },
+              {
+                errorTitle: "回答格式不符合要求",
+              },
+            );
+            return;
+          }
           const ok = await runStatusAction(
             () => rpc.answer({ chat, answer }),
             {
@@ -60,7 +75,15 @@ export function AnswerQuestion({
           <div className={tw("whitespace-pre-wrap")}>{question}</div>
         </Fieldset>
         <Fieldset title="回答" disabled={submitting}>
-          <FormTextarea proxy={proxy("answer")} required />
+          <FormTextarea
+            proxy={proxy("answer")}
+            required
+            maxLength={answerConstraints.max_length}
+          />
+          <div className={tw("text-subtitle-text mt-1 text-xs")}>
+            最多{answerConstraints.max_length}字，至少{answerConstraints.min_lines}
+            行（按非空行统计）
+          </div>
         </Fieldset>
         <Button
           variant="solid"

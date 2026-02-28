@@ -17,6 +17,10 @@ const config: ChatConfig = {
     text_in_group: "group",
   },
   response_template: "resp",
+  answer_constraints: {
+    max_length: 500,
+    min_lines: 1,
+  },
 };
 
 function buildRequest(): ChatJoinRequest {

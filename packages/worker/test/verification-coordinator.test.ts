@@ -52,6 +52,10 @@ describe("verification coordinator", () => {
         timeout: 10,
         prompt: { text_in_private: "p", text_in_group: "g" },
         response_template: "r",
+        answer_constraints: {
+          max_length: 500,
+          min_lines: 1,
+        },
       },
       deadline: 1000,
     });
@@ -68,6 +72,10 @@ describe("verification coordinator", () => {
           timeout: 10,
           prompt: { text_in_private: "p", text_in_group: "g" },
           response_template: "r",
+          answer_constraints: {
+            max_length: 500,
+            min_lines: 1,
+          },
         },
         deadline: 1000,
       },

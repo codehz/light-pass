@@ -10,7 +10,7 @@ export function useStatusRpcAction() {
     async (
       action: () => Promise<unknown>,
       options: {
-        successText: string;
+        successText?: string;
         errorTitle?: string;
       },
     ): Promise<boolean> => {
@@ -18,16 +18,19 @@ export function useStatusRpcAction() {
         await action();
         hapticFeedback.notificationOccurred.ifAvailable("success");
         await client.refetchQueries({ queryKey: ["status"] });
-        toast(options.successText);
+        if (options.successText) {
+          toast(options.successText);
+        }
         return true;
       } catch (e) {
         hapticFeedback.notificationOccurred.ifAvailable("error");
+        const message = e instanceof Error ? e.message : String(e);
         if (popup.show.isAvailable()) {
           await popup
-            .show({ title: options.errorTitle ?? "操作失败", message: `${e}` })
+            .show({ title: options.errorTitle ?? "操作失败", message })
             .catch(() => {});
         } else {
-          alert(`${e}`);
+          alert(message);
         }
         return false;
       }

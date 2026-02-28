@@ -1,5 +1,6 @@
 import { Update } from "@telegraf/types";
 import { type } from "arktype";
+import { ANSWER_VALIDATION_ERROR_PREFIX } from "../../shared/src/answerConstraints";
 import type { RpcRequest } from "../../shared/src/contracts";
 import type { Backend } from "./Backend";
 import { WorkersCacheStorage } from "workers-cache-storage";
@@ -224,7 +225,17 @@ async function handleWebhookRequest(
       });
     } catch (e) {
       console.error("Error processing direct message answer", e);
-      return new Response("OK");
+      const answerValidationMessage = unwrapAnswerValidationMessage(e);
+      if (answerValidationMessage) {
+        return direct.sendMessage({
+          chat_id: update.message.chat.id,
+          text: answerValidationMessage,
+        });
+      }
+      return direct.sendMessage({
+        chat_id: update.message.chat.id,
+        text: "提交失败，请稍后重试。",
+      });
     }
   }
 
@@ -308,7 +319,7 @@ async function handleRpcRequest(
         throw new Error(`unknown method: ${(rpc as { method: string }).method}`);
     }
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: `${e}` }), {
+    return new Response(JSON.stringify({ ok: false, error: stringifyError(e) }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -370,3 +381,20 @@ const RpcMethods = type({
     method: "'adminAction'",
     params: { chat: "number", user: "number", action: AdminActionSchema },
   });
+
+function stringifyError(error: unknown): string {
+  return unwrapAnswerValidationMessage(error) ?? rawErrorMessage(error);
+}
+
+function unwrapAnswerValidationMessage(error: unknown): string | null {
+  const message = rawErrorMessage(error);
+  const index = message.indexOf(ANSWER_VALIDATION_ERROR_PREFIX);
+  if (index < 0) {
+    return null;
+  }
+  return message.slice(index + ANSWER_VALIDATION_ERROR_PREFIX.length);
+}
+
+function rawErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

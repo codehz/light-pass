@@ -1,5 +1,15 @@
 export type ChatMode = "FORM" | "PASS" | "IGNORE";
 
+export type AnswerConstraints = {
+  max_length: number;
+  min_lines: number;
+};
+
+export const DEFAULT_ANSWER_CONSTRAINTS: AnswerConstraints = {
+  max_length: 500,
+  min_lines: 1,
+};
+
 export type ChatConfig = {
   question: string;
   welcome: string;
@@ -9,6 +19,7 @@ export type ChatConfig = {
     text_in_group: string;
   };
   response_template: string;
+  answer_constraints: AnswerConstraints;
 };
 
 export const DEFAULT_RESPONSE_TEMPLATE =
@@ -56,6 +67,7 @@ export declare namespace RpcStatus {
   export type Request = {
     id: number;
     question: string;
+    answer_constraints: AnswerConstraints;
     title: string;
     photo?: string;
     answered: boolean;

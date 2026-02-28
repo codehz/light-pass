@@ -52,7 +52,13 @@ export function Status() {
   return children.length ? children : <div>今日无事可做</div>;
 }
 
-function RequestCard({ id, title, photo, question }: RpcStatus.Request) {
+function RequestCard({
+  id,
+  title,
+  photo,
+  question,
+  answer_constraints,
+}: RpcStatus.Request) {
   return (
     <CardLayout
       photo={photo}
@@ -61,6 +67,7 @@ function RequestCard({ id, title, photo, question }: RpcStatus.Request) {
         <AnswerQuestion
           chat={id}
           question={question}
+          answerConstraints={answer_constraints}
           title={title}
           photo={photo}
         />

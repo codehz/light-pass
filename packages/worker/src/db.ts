@@ -1,6 +1,10 @@
 import { type } from "arktype";
 import { relations } from "drizzle-orm";
-import type { ChatConfig as SharedChatConfig, ChatMode } from "../../shared/src/contracts";
+import {
+  type ChatConfig as SharedChatConfig,
+  type ChatMode,
+} from "../../shared/src/contracts";
+import { normalizeAnswerConstraints } from "../../shared/src/answerConstraints";
 import {
   customType,
   foreignKey,
@@ -24,21 +28,50 @@ export const PromptConfig = type({
 });
 export type PromptConfig = typeof PromptConfig.infer;
 
+export const AnswerConstraints = type({
+  max_length: "number",
+  min_lines: "number",
+});
+export type AnswerConstraints = typeof AnswerConstraints.infer;
+
 export const ChatConfig = type({
   question: "string",
   welcome: "string",
   timeout: "number",
   prompt: PromptConfig,
   response_template: "string",
+  answer_constraints: AnswerConstraints,
 });
 export type ChatConfig = SharedChatConfig;
 const $ChatConfig = customType<{ data: ChatConfig; driverData: string }>({
   dataType: () => "text",
   fromDriver: (value) => {
     const result = JSON.parse(value);
-    const verified = ChatConfig(result);
+    const base =
+      typeof result === "object" && result !== null
+        ? result
+        : ({} as Record<string, unknown>);
+    const legacyConstraints =
+      "answer_constraints" in base &&
+      typeof base.answer_constraints === "object" &&
+      base.answer_constraints !== null
+        ? base.answer_constraints
+        : null;
+    const normalized = {
+      ...base,
+      answer_constraints: normalizeAnswerConstraints(
+        legacyConstraints as Partial<SharedChatConfig["answer_constraints"]> | null,
+      ),
+    };
+    const verified = ChatConfig(normalized);
     if (verified instanceof type.errors) {
       throw new Error("Invalid prompt config");
+    }
+    if (
+      verified.answer_constraints.max_length < 1 ||
+      verified.answer_constraints.min_lines < 1
+    ) {
+      throw new Error("Invalid answer constraints");
     }
     return verified;
   },

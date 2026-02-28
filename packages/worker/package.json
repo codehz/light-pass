@@ -9,7 +9,7 @@
     "cf-typegen": "wrangler types",
     "migration:generate": "drizzle-kit generate --dialect=sqlite --driver=durable-sqlite --schema=./src/db.ts --out=./src/migrations",
     "typecheck": "bunx tsc --noEmit",
-    "test:core": "bun test ./test/join-request-flow.test.ts ./test/verification-coordinator.test.ts"
+    "test:core": "bun test ./test/join-request-flow.test.ts ./test/verification-coordinator.test.ts ./test/answer-constraints.test.ts"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.8",

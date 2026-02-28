@@ -33,17 +33,28 @@ export function ChatSettings({
   title: string;
   photo?: string;
 }) {
+  const defaultAnswerConstraints = {
+    max_length: 500,
+    min_lines: 1,
+  };
   const root = useFormRoot<ChatConfig>({
-    values: initial ?? {
-      question: "",
-      welcome: "",
-      timeout: 600,
-      prompt: {
-        text_in_private: "",
-        text_in_group: "",
-      },
-      response_template: DEFAULT_RESPONSE_TEMPLATE,
-    },
+    values: initial
+      ? {
+          ...initial,
+          answer_constraints:
+            initial.answer_constraints ?? defaultAnswerConstraints,
+        }
+      : {
+          question: "",
+          welcome: "",
+          timeout: 600,
+          prompt: {
+            text_in_private: "",
+            text_in_group: "",
+          },
+          response_template: DEFAULT_RESPONSE_TEMPLATE,
+          answer_constraints: defaultAnswerConstraints,
+        },
   });
   const proxy = useFormFieldProxy(root);
   const pop = useNavigatePop();
@@ -114,6 +125,22 @@ export function ChatSettings({
             <FormTextareaWithVariables
               proxy={proxy("response_template")}
               variables={RESPONSE_TEMPLATE_VARIABLES}
+              required
+            />
+          </FormLabel>
+          <FormLabel title="最大长度（字符）">
+            <FormInput.number
+              proxy={proxy("answer_constraints.max_length")}
+              min={1}
+              step={1}
+              required
+            />
+          </FormLabel>
+          <FormLabel title="最小行数（按非空行）">
+            <FormInput.number
+              proxy={proxy("answer_constraints.min_lines")}
+              min={1}
+              step={1}
               required
             />
           </FormLabel>

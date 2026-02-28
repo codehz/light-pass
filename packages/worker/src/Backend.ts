@@ -4,6 +4,10 @@ import { and, eq } from "drizzle-orm";
 import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { nanoid } from "nanoid";
+import {
+  ANSWER_VALIDATION_ERROR_PREFIX,
+  validateAnswer,
+} from "../../shared/src/answerConstraints";
 import type { AdminAction, RpcStatus } from "../../shared/src/contracts";
 import { WorkersCacheStorage } from "workers-cache-storage";
 import { api, BotError } from "./api";
@@ -288,6 +292,12 @@ export class Backend extends DurableObject<Env> {
     chat: number,
     config: schema.ChatConfig,
   ): Promise<void> {
+    if (
+      config.answer_constraints.max_length < 1 ||
+      config.answer_constraints.min_lines < 1
+    ) {
+      throw new Error("invalid answer constraints");
+    }
     await this.#db
       .insert(schema.Chat)
       .values({ id: chat, config })
@@ -315,6 +325,15 @@ export class Backend extends DurableObject<Env> {
         console.error("invalid join request", found);
         await deleteJoinRequest(tx, chat, user);
         return;
+      }
+      const validation = validateAnswer(
+        answer,
+        found.Chat.config.answer_constraints,
+      );
+      if (!validation.ok) {
+        throw new Error(
+          `${ANSWER_VALIDATION_ERROR_PREFIX}${validation.message}`,
+        );
       }
       try {
         await insertJoinResponse(tx, {
