@@ -103,6 +103,22 @@ export function ChatSettings({
               required
             />
           </FormLabel>
+          <FormLabel title="最大长度（字符）">
+            <FormInput.number
+              proxy={proxy("answer_constraints.max_length")}
+              min={1}
+              step={1}
+              required
+            />
+          </FormLabel>
+          <FormLabel title="最小行数（按非空行）">
+            <FormInput.number
+              proxy={proxy("answer_constraints.min_lines")}
+              min={1}
+              step={1}
+              required
+            />
+          </FormLabel>
         </Fieldset>
         <Fieldset title="触发提示" disabled={saving}>
           <FormLabel title="私聊提示">
@@ -119,28 +135,10 @@ export function ChatSettings({
               required
             />
           </FormLabel>
-        </Fieldset>
-        <Fieldset title="用户回答展示" disabled={saving}>
-          <FormLabel title="回答模板">
+          <FormLabel title="回答提示">
             <FormTextareaWithVariables
               proxy={proxy("response_template")}
               variables={RESPONSE_TEMPLATE_VARIABLES}
-              required
-            />
-          </FormLabel>
-          <FormLabel title="最大长度（字符）">
-            <FormInput.number
-              proxy={proxy("answer_constraints.max_length")}
-              min={1}
-              step={1}
-              required
-            />
-          </FormLabel>
-          <FormLabel title="最小行数（按非空行）">
-            <FormInput.number
-              proxy={proxy("answer_constraints.min_lines")}
-              min={1}
-              step={1}
               required
             />
           </FormLabel>
