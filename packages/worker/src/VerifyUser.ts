@@ -293,6 +293,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
                 event.payload.chat,
                 event.payload.user,
               ),
+              link_preview_options: { is_disabled: true },
             });
             return sent.message_id;
           } catch (e) {
