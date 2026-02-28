@@ -5,7 +5,10 @@ import type { Backend } from "./Backend";
 import { WorkersCacheStorage } from "workers-cache-storage";
 import { api, direct } from "./api";
 import { ChatConfig } from "./db";
-import { withOpenAppButton } from "./utils/button";
+import {
+  decodeAdminActionCallbackData,
+  withOpenAppButton,
+} from "./utils/button";
 import { checkChatMember } from "./utils/checkChatMember";
 import { createEncryptor, Encryptor } from "./utils/encrypt";
 import { validateTelegramMiniAppData } from "./utils/validateTelegramMiniAppData";
@@ -99,6 +102,83 @@ async function handleWebhookRequest(
     return new Response("OK");
   }
 
+  if ("callback_query" in update) {
+    const query = update.callback_query;
+    if (!("data" in query) || !query.data) return new Response("OK");
+
+    const action = decodeAdminActionCallbackData(query.data);
+    if (!action) return new Response("OK");
+
+    if (query.message?.chat.id && query.message.chat.id !== action.chat) {
+      await api
+        .answerCallbackQuery(env.BOT_TOKEN, {
+          callback_query_id: query.id,
+          text: "无效操作",
+          show_alert: true,
+        })
+        .catch((e) => console.error("failed to answer callback query", e));
+      return new Response("OK");
+    }
+
+    let isAdmin = false;
+    try {
+      const member = await api.getChatMember(env.BOT_TOKEN, {
+        chat_id: action.chat,
+        user_id: query.from.id,
+      });
+      isAdmin = checkChatMember(member);
+      if (isAdmin) {
+        await backend.addAdmin(action.chat, query.from.id);
+      } else {
+        await backend.removeAdmin(action.chat, query.from.id);
+      }
+    } catch (e) {
+      console.error("failed to verify admin identity", e);
+    }
+
+    if (!isAdmin) {
+      await api
+        .answerCallbackQuery(env.BOT_TOKEN, {
+          callback_query_id: query.id,
+          text: "仅群管理员可执行该操作",
+          show_alert: true,
+        })
+        .catch((e) => console.error("failed to answer callback query", e));
+      return new Response("OK");
+    }
+
+    try {
+      await backend.handleAdminAction(action.chat, action.user, action.action);
+      await api.answerCallbackQuery(env.BOT_TOKEN, {
+        callback_query_id: query.id,
+        text: formatActionSuccessText(action.action.type),
+      });
+      if (query.message?.message_id) {
+        await api
+          .editMessageReplyMarkup(env.BOT_TOKEN, {
+            chat_id: action.chat,
+            message_id: query.message.message_id,
+            reply_markup: withOpenAppButton(env.BOT_USERNAME),
+          })
+          .catch((e) =>
+            console.error("failed to reset callback action buttons", e),
+          );
+      }
+    } catch (e) {
+      console.error("failed to process callback admin action", e);
+      await api
+        .answerCallbackQuery(env.BOT_TOKEN, {
+          callback_query_id: query.id,
+          text: `${e}`.includes("invalid join request")
+            ? "该请求已处理或已过期"
+            : "操作失败，请稍后重试",
+          show_alert: true,
+        })
+        .catch((error) => console.error("failed to answer callback query", error));
+    }
+    return new Response("OK");
+  }
+
   if ("message" in update) {
     if (update.message.chat.type !== "private" || !("text" in update.message)) {
       return new Response("OK");
@@ -149,6 +229,19 @@ async function handleWebhookRequest(
   }
 
   return new Response("OK");
+}
+
+function formatActionSuccessText(
+  action: "approved by admin" | "declined by admin" | "banned by admin",
+) {
+  switch (action) {
+    case "approved by admin":
+      return "已通过该入群请求";
+    case "declined by admin":
+      return "已拒绝该入群请求";
+    case "banned by admin":
+      return "已封禁并拒绝该入群请求";
+  }
 }
 
 async function handleRpcRequest(

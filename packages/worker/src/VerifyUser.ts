@@ -8,7 +8,7 @@ import {
 import { NonRetryableError } from "cloudflare:workflows";
 import type { AdminAction, ChatConfig } from "../../shared/src/contracts";
 import { api, BotError } from "./api";
-import { withOpenAppButton } from "./utils/button";
+import { withAnswerActionButtons, withOpenAppButton } from "./utils/button";
 import { getChatInviteLink, getChatTitle } from "./utils/chat";
 import { escapeValue, renderTemplate } from "./utils/template";
 
@@ -288,7 +288,11 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
               chat_id: event.payload.chat,
               text: renderedText,
               parse_mode: "MarkdownV2",
-              reply_markup: withOpenAppButton(this.env.BOT_USERNAME),
+              reply_markup: withAnswerActionButtons(
+                this.env.BOT_USERNAME,
+                event.payload.chat,
+                event.payload.user,
+              ),
             });
             return sent.message_id;
           } catch (e) {
