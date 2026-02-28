@@ -96,7 +96,7 @@ export class VerifyUser extends WorkflowEntrypoint<Env, VerifyUserParams> {
     const context: Context = {
       user: {
         ref: userChat.username
-          ? `@${userChat.username}`
+          ? `@${escapeValue(userChat.username)}`
           : `[${escapeValue(userDisplayName)}](tg://user?id=${event.payload.user})`,
         id: event.payload.user,
         first_name: userChat.first_name || "",
